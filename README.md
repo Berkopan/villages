@@ -1,5 +1,119 @@
 # Villages
 
+[English](#english) · [Türkçe](#türkçe)
+
+<a id="english"></a>
+
+## English
+
+**Small lives, big stories.** Villages is a living, pixel-art civilization simulation that runs entirely in your browser.
+
+People gather food, get tired, rest, learn, form families, and grow old. Surplus production can give rise to settlements, while pressure on resources can trigger migration or conflict. There is no scripted quest line: individual rules and actions change the conditions faced by everyone else.
+
+![The settlement of Korudere in the Söğüt Vadisi world on simulation day 480; actual in-game rendering](assets/preview.png)
+
+*An actual simulation snapshot: `Söğüt Vadisi`, day 480. No buildings or characters were manually placed for this preview.*
+
+[View the live interface and Korudere inspector screenshot.](assets/interface-1792233917993.jpg)
+
+### What happens in this world?
+
+- **Distinct individuals:** Names, family relationships, seven inherited dispositions, inventories, health, hunger, energy, social needs, and morale. Children can inherit aspects of their parents' appearance and dispositions.
+- **Visible life stages:** Babies, children, teenagers, adults, and elders have distinct body proportions and stances. Clothing details evolve across 20 levels, with bags, cloaks, and equipment appearing as characters gain experience.
+- **Twelve occupations:** Gatherer, farmer, lumberjack, miner, fisher, hunter, builder, blacksmith, healer, trader, warrior, and scholar. Work choices respond to needs, supplies, experience, and local opportunities. A person can acquire skills in multiple professions.
+- **Real resource flows:** Resources are removed from terrain, carried by people, and deposited in settlements. Houses require materials and labor; tools increase productivity but wear down. Food is consumed or spoils. Traders physically carry their cargo.
+- **Emergent communities:** Proximity, adult population, work experience, fertile terrain, and shared food can create a communal camp. Housing, specialization, infrastructure, and accumulated knowledge unlock hamlets, villages, towns, and cities. Settlements can regress when conditions deteriorate.
+- **Families and generations:** Adults' partnerships, adequate food, and living conditions influence the probability of childbirth. Pregnancy takes time. The inspector tracks living family members, parents, children, and generations.
+- **Migration, trade, and war:** Hunger, housing shortages, conflicts, and curiosity can drive migration. Trading settlements exchange trust and knowledge. Border pressure, scarcity, and tensions can lead to warfare; exhaustion and losses can eventually lead to peace.
+- **Living ecosystems:** Seeded rivers, crossings, shores, forests, hills, and mountains. Four seasons, rain, snow, drought, fire, irrigation, growing crops, and finite resources. Deer, boar, and wolves have their own feeding, movement, and reproduction cycles.
+- **Thirteen buildings:** Communal hearth, hut, house, granary, well, lumberyard, mine, workshop, market, barracks, watchtower, town hall, and shrine. Construction clears real terrain, and fires can leave damaged structures.
+
+Detailed mechanics and civilization thresholds are described in [Simulation rules](docs/SIMULATION.md) (Turkish).
+
+### Observer's desk
+
+Click a person, building, settlement, or tile to inspect it. Follow individuals to watch their needs, jobs, skills, possessions, and families. Settlement journals reveal resources, knowledge, relationships, and residents. The chronicle and population chart come from actual simulation data.
+
+Alongside the natural map, switch between **civilization borders, soil fertility, natural resources, and danger** overlays. The atlas and camera controls help you navigate large worlds. On mobile, the inspector is a slide-up panel and the map supports dragging and pinch-to-zoom.
+
+You can intervene by adding rain, food, trees, new people, or fire. Interventions alter the same terrain and resources as the simulation, so subsequent outcomes still emerge from the rules. Optional ambient wind and bird sounds are synthesized in the browser.
+
+### Language / Dil
+
+Use the **TR / EN** selector in the top bar to switch the interface between Turkish and English without restarting the simulation. The preference is saved in your browser and, when no saved preference exists, defaults to the browser's language. This changes only presentation; world state, deterministic random state, and save files are unchanged. Previously saved Turkish chronicle entries are translated for display where their templates are recognized; player-entered names and seed strings are left intact.
+
+### Time and controls
+
+A year lasts **96 simulation days**, and a season lasts **24 days**. At `1×`, the target rate is one simulation day per real second. `2×`, `5×`, `10×`, and `25×` let you watch generations evolve faster. Actual performance may vary with device speed; the simulation does not advance while the tab is in the background.
+
+| Control | Action |
+|---|---|
+| Click / tap | Inspect a person, structure, settlement, or tile |
+| Drag | Pan the map |
+| Mouse wheel / pinch | Zoom in and out |
+| `Space` | Pause / resume |
+| `1` – `5` | Select 1×, 2×, 5×, 10×, or 25× speed |
+| `.` | Pause and advance by 0.1 simulation day |
+| `+` / `−` | Zoom in / out |
+| `F` | Follow selected person |
+| `C` | Fit the whole world |
+| `Esc` | Clear selection and return to inspect tool |
+| `H` / `?` | Open the observer's guide |
+
+Shortcuts do not intercept typing in forms or open dialogs.
+
+### Saves and new worlds
+
+**Manual and automatic saves occupy separate slots.** While the world is running, an autosave is taken about every 30 seconds and when leaving the page. A normal reload restores the last autosave in a paused state. Creating a new world does not erase the manual save; both can be loaded independently.
+
+JSON export/import preserves the complete world state, families, ongoing tasks, trading trips, and random generator state. Imports are validated. If browser storage is unavailable, you can export a portable JSON backup. Clearing the browser's site data also removes local saves.
+
+The new-world dialog lets you choose seed, initial population, map dimensions, climate, and aggression. The initial population range is 24–192; the living-population cap is 500. You may open a seeded new world using `?seed=Ardic` in the URL, but a seed link is not a replacement for a save file. With the same engine version, settings, and interventions in the same order, simulation results are deterministic.
+
+### Run locally
+
+Requires **Node.js 24+** for development tooling. No external npm packages need to be installed.
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:4173`. Because the app uses ES modules, serve it over HTTP rather than opening `index.html` directly with `file://`.
+
+```bash
+npm run check
+npm test
+npm run build
+```
+
+The build copies self-contained static assets to `dist/` and validates local paths. No server API, accounts, secrets, CDN, or external fonts are needed at runtime. Relative asset paths make subdirectory hosting possible; the repository root can also be served statically without building.
+
+### Pixel art
+
+Every game sprite is drawn pixel by pixel on Canvas specifically for this project—no third-party sprite sheets or emoji assets. The same drawing system powers gameplay, character portraits, and the visual catalog.
+
+The character renderer combines eight skin tones, ten hair tones, ten hairstyles, twelve clothing palettes, eight accent colors, and sixteen body/clothing variants with age, gender, profession, orientation, action, and level details. Animations reflect actual actions: a character walking to work does not start chopping wood or mining before arriving.
+
+With the development server running, visit `/docs/assets-preview.html` to inspect age groups, appearance variations, occupation animations, all 20 levels, and building construction stages. The catalog is included in static builds.
+
+### Verification and development
+
+Node's built-in test runner covers deterministic world generation, river crossings, unreachable areas, genetics, ancestry, seasonal boundaries, causes of death, war damage, population caps, interventions, and malformed saves. A longer simulation test runs for **3,000 simulation days**, then saves and restores the mature world and checks that decisions and events continue identically.
+
+GitHub Actions runs syntax/import checks, automated tests, and static builds on changes. The interface has also been manually checked on desktop and narrow screens. Architecture, APIs, and integration points are documented in the [Technical contract](docs/CONTRACT.md) (Turkish).
+
+### Design limitations
+
+Villages is a rule-based toy world, **not** a scientific predictor of human behavior or historical civilizations. Characters do not use LLMs; needs, weighted probabilities, local relationships, and pathfinding drive their actions. A particular seed is not guaranteed to develop a city, war, or indefinitely growing population. Communities can die out.
+
+The simulation runs in a single browser tab on your device. There is no multiplayer server or cloud save synchronization, and no maritime transport. Recent events, chart samples, and memorial records are bounded to limit long-running memory use. Performance depends on your device, especially with large maps, high speed, and a 500-person population.
+
+---
+
+<a id="türkçe"></a>
+
+## Türkçe
+
 **Küçük hayatlar, büyük hikâyeler.** Tarayıcıda yaşayan, tamamen piksel sanatıyla çizilmiş bir medeniyet simülasyonu.
 
 İnsanlar yiyecek arar, yorulur, dinlenir, öğrenir, aile kurar ve yaşlanır. Birlikte ürettikleri fazlalık yerleşimlere dönüşebilir; kaynak baskısı göçe veya çatışmaya yol açabilir. Hikâyeyi belirleyen bir görev dizisi yoktur. Aynı çevrede çalışan bireysel kurallar birbirlerinin koşullarını değiştirir.
