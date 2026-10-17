@@ -3,6 +3,7 @@ import { WorldRenderer } from './render/renderer.js';
 import { createUI } from './ui/ui.js';
 import { AUTOSAVE_KEY, SAVE_KEY, MAX_SAVE_BYTES, decodeSave, encodeSave, readSave, writeSave } from './persistence.js';
 import { WorldAudio } from './audio.js';
+import { t } from './ui/i18n.js';
 
 const FIXED_SECONDS = 0.1;
 const SPEEDS = [1, 2, 5, 10, 25];
@@ -129,11 +130,11 @@ function frameHabitat() {
 function updateMapStatus(point) {
   const status = document.querySelector('#map-status-text') || document.querySelector('#map-status');
   if (!status) return;
-  if (!point) { status.textContent = 'Sürükle: gezin · Tekerlek: yakınlaş · Tıkla: incele'; return; }
+  if (!point) { status.textContent = t('Sürükle: gezin · Tekerlek: yakınlaş · Tıkla: incele'); return; }
   const x = Math.floor(point.x), y = Math.floor(point.y);
   const tile = getTile(world, x, y);
   const labels = { deepwater: 'Açık deniz', water: 'Su', sand: 'Kumsal', grass: 'Çayır', forest: 'Orman', hill: 'Tepe', mountain: 'Dağ', snow: 'Karlı zirve' };
-  if (tile) status.textContent = `${labels[tile.biome] || tile.biome} · ${x}, ${y} · Verim ${Math.round(tile.fertility * (tile.fertility <= 1 ? 100 : 1))}%`;
+  if (tile) status.textContent = `${t(labels[tile.biome] || tile.biome)} · ${x}, ${y} · ${t('Verim')} ${Math.round(tile.fertility * (tile.fertility <= 1 ? 100 : 1))}%`;
 }
 
 function download(text, filename, type = 'application/json') {
