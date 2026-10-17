@@ -9,6 +9,8 @@ await mkdir(dist, { recursive: true });
 for (const item of ['index.html', 'src', 'assets', '.nojekyll']) {
   await cp(path.join(root, item), path.join(dist, item), { recursive: true });
 }
+await mkdir(path.join(dist, 'docs'), { recursive: true });
+await cp(path.join(root, 'docs/assets-preview.html'), path.join(dist, 'docs/assets-preview.html'));
 const html = await readFile(path.join(dist, 'index.html'), 'utf8');
 for (const match of html.matchAll(/(?:src|href)=["'](\.\/[^"']+)["']/g)) {
   await stat(path.resolve(dist, match[1]));
