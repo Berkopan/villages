@@ -38,6 +38,7 @@ const TRAIT = {
   explorer: 'Kâşif', diligent: 'Çalışkan', sturdy: 'Sağlam', impulsive: 'Dürtüsel',
   calm: 'Sakin', restless: 'Hareketli', clever: 'Kavrayışlı', stubborn: 'İnatçı',
 };
+const TRAIT_DIMENSION = { diligence: 'Çalışkanlık', sociability: 'Sosyallik', courage: 'Cesaret', curiosity: 'Merak', resilience: 'Dayanıklılık', fertility: 'Doğurganlık', aggression: 'Saldırganlık' };
 const BIOME = {
   deepwater: ['Açık deniz', 'droplet'], water: ['Su', 'droplet'], sand: ['Kumsal', 'sun'],
   grass: ['Çayır', 'sprout'], forest: ['Orman', 'tree'], hill: ['Tepe', 'mountain'],
@@ -69,6 +70,7 @@ export function escapeHtml(value) {
   });
 }
 function number(value, fallback = 0) { const result = Number(value); return Number.isFinite(result) ? result : fallback; }
+function hasNumber(value) { return value != null && value !== '' && Number.isFinite(Number(value)); }
 function clamp(value, min = 0, max = 100) { return Math.max(min, Math.min(max, number(value))); }
 function format(value, decimal = false) { return (decimal ? DECIMAL : INTEGER).format(number(value)); }
 function percent(value) { const n = number(value); return clamp(n <= 1 ? n * 100 : n); }
@@ -86,9 +88,10 @@ function detailRow(title, value) { return '<div class="detail-row"><span>' + esc
 function personLink(person, fallback = '—') {
   return person ? '<button data-select-type="agent" data-select-id="' + escapeHtml(person.id) + '" data-focus-key="person-' + escapeHtml(person.id) + '">' + escapeHtml(person.name || 'İsimsiz') + '</button>' : '<strong>' + escapeHtml(fallback) + '</strong>';
 }
-function resourceGrid(resources, keys = RESOURCE_KEYS) {
+function resourceGrid(resources, keys = RESOURCE_KEYS, overrides = {}) {
   return '<div class="resources-grid">' + keys.map(function (key) {
-    return '<div class="resource-item ' + key + '" title="' + RESOURCE[key][0] + '"><span>' + icon(RESOURCE[key][1]) + '</span><strong>' + format(resources?.[key]) + '</strong><span>' + RESOURCE[key][0] + '</span></div>';
+    const title = overrides[key] || RESOURCE[key][0];
+    return '<div class="resource-item ' + key + '" title="' + escapeHtml(title) + '"><span>' + icon(RESOURCE[key][1]) + '</span><strong>' + format(resources?.[key]) + '</strong><span>' + escapeHtml(title) + '</span></div>';
   }).join('') + '</div>';
 }
 function needRow(title, value, symbol) {
@@ -125,13 +128,14 @@ function observation(world, stats) {
   const agents = list(world.agents);
   const hungry = agents.filter(function (agent) { return number(agent.hunger) >= 70; }).length;
   const wars = number(stats.wars);
+  const activeSettlements = list(world.settlements).filter(function (settlement) { return number(settlement.population) > 0; });
   if (!agents.length) return 'Bu dünyada yaşayan insan kalmadı. Yeni hayatlar aracıyla bir topluluk ekleyebilir, aynı ekosistemde yeni bir başlangıcı izleyebilirsin.';
   if (wars > 0) return format(wars) + ' çatışma sürüyor. Sınırlar katmanını açarak komşu toplulukları, bir yerleşimi seçerek ilişkilerini inceleyebilirsin.';
   if (hungry >= Math.max(5, agents.length * .18)) return format(hungry) + ' kişinin açlığı yükseliyor. Kaynaklar katmanı, yakın çevredeki yiyecek dağılımını görünür kılar.';
   if (world.season === 'winter') return 'Kış geldi. Depolanan erzakların, barınakların ve birlikte yaşamanın bu nesli nasıl etkilediğini izle.';
-  if (!list(world.settlements).length) return 'Henüz bir yerleşim yok. İnsanlar kaynak ararken yakınlaşacak; ilk toplulukların nerede kök salacağını izle.';
-  if (list(world.settlements).length === 1) return 'İlk topluluk kök saldı. Yiyecek, barınak ve biriken bilgi; bu küçük yerin geleceğini birlikte şekillendiriyor.';
-  return format(list(world.settlements).length) + ' yerleşim aynı dünyayı paylaşıyor. Birini seç; iş bölümünü, biriken bilgiyi ve komşularıyla ilişkilerini keşfet.';
+  if (!activeSettlements.length) return 'Şu an yaşayan bir yerleşim yok. İnsanlar kaynak ararken yakınlaşabilir; yeni toplulukların nerede kök salacağını izle.';
+  if (activeSettlements.length === 1) return 'Bir topluluk kök saldı. Yiyecek, barınak ve biriken bilgi; bu küçük yerin geleceğini birlikte şekillendiriyor.';
+  return format(activeSettlements.length) + ' yerleşim aynı dünyayı paylaşıyor. Birini seç; iş bölümünü, biriken bilgiyi ve komşularıyla ilişkilerini keşfet.';
 }
 function overview(world, stats) {
   const agents = list(world.agents);
@@ -144,17 +148,24 @@ function overview(world, stats) {
   const elder = agents.filter(function (agent) { return number(agent.age) >= 58; }).length;
   const adult = agents.length - young - elder;
   const denom = Math.max(1, agents.length);
-  const settlements = list(world.settlements).slice().sort(function (a, b) { return number(b.population) - number(a.population); });
+  const settlements = list(world.settlements).filter(function (settlement) { return number(settlement.population) > 0; }).sort(function (a, b) { return number(b.population) - number(a.population); });
   const settlementMarkup = settlements.length ? '<div class="settlement-list">' + settlements.map(function (settlement) {
     const members = agents.filter(function (agent) { return sameId(agent.settlementId, settlement.id); }).length;
     return settlementButton(settlement, members);
-  }).join('') + '</div>' : '<p class="empty-settlements">İlk ateş henüz yakılmadı. Birlikte yaşamanın başlayacağı yeri insanlar bulacak.</p>';
+  }).join('') + '</div>' : '<p class="empty-settlements">' + (list(world.settlements).length ? 'Eski yerleşimlerde hayat söndü. Yeni toplulukların doğuşu için dünya hâlâ burada.' : 'İlk ateş henüz yakılmadı. Birlikte yaşamanın başlayacağı yeri insanlar bulacak.') + '</p>';
+  const occupations = {};
+  agents.filter(function (agent) { return number(agent.age) >= 12; }).forEach(function (agent) { occupations[agent.role] = (occupations[agent.role] || 0) + 1; });
+  const occupationMarkup = Object.entries(occupations).sort(function (a, b) { return b[1] - a[1]; }).map(function ([role, count]) {
+    return '<div class="occupation-row"><span>' + escapeHtml(label(ROLE, role)) + '</span><span class="occupation-track"><i style="width:' + (count / denom * 100).toFixed(2) + '%"></i></span><strong>' + format(count) + '</strong></div>';
+  }).join('');
   return '<div class="overview-population"><div><span class="metric-label">Yaşayan insanlar</span><strong class="population-large">' + format(population) + '<small>kişi</small></strong></div><div class="population-movement"><span>' + icon('heart') + format(births) + ' doğum</span><span class="death-count">' + icon('cross') + format(deaths) + ' ölüm</span></div></div>' +
     populationChart(world.history, population, world.day) +
     '<div class="overview-submetrics"><div class="overview-submetric"><strong>' + format(avgAge, true) + '</strong><span>Ortalama yaş</span></div><div class="overview-submetric"><strong>' + format(avgLevel, true) + '</strong><span>Ortalama seviye</span></div><div class="overview-submetric"><strong>' + format(stats.wars) + '</strong><span>Aktif çatışma</span></div></div>' +
     '<div class="demographic-line" aria-label="' + format(young) + ' genç, ' + format(adult) + ' yetişkin, ' + format(elder) + ' yaşlı"><span class="young" style="width:' + (young / denom * 100).toFixed(2) + '%"></span><span class="adult" style="width:' + (adult / denom * 100).toFixed(2) + '%"></span><span class="elder" style="width:' + (elder / denom * 100).toFixed(2) + '%"></span></div><div class="demographic-legend"><span><i></i>Genç ' + format(young) + '</span><span><i></i>Yetişkin ' + format(adult) + '</span><span><i></i>Yaşlı ' + format(elder) + '</span></div>' +
     section('ERZAK VE HAM MADDELER', resourceGrid(totalsFor(world, stats))) +
     section('YERLEŞİMLER', settlementMarkup, format(settlements.length) + ' topluluk') +
+    (occupationMarkup ? section('İŞ BÖLÜMÜ', '<div class="occupation-list">' + occupationMarkup + '</div>') : '') +
+    section('DÜNYADA YAŞAM', detailRow('Yaban hayvanları', format(stats.animals ?? list(world.animals).length)) + detailRow('Tarlalar', format(stats.farms ?? list(world.farms).length)) + detailRow('Tamamlanan yapılar', format(stats.buildings)) + detailRow('Göçler', format(stats.migrations ?? world.metrics?.migrations)) + detailRow('Ticaret seferleri', format(stats.trades ?? world.metrics?.trades))) +
     '<div class="world-observation"><div class="observation-label">' + icon('eye') + 'GÖZLEMCİ NOTU</div><p>' + escapeHtml(observation(world, stats)) + '</p></div>';
 }
 function traitsFor(agent) {
@@ -168,19 +179,27 @@ function personInspector(agent, world, snapshot) {
   const partner = agents.find(function (person) { return sameId(person.id, agent.partnerId); });
   const children = list(agent.childrenIds);
   const livingChildren = children.map(function (id) { return agents.find(function (person) { return sameId(person.id, id); }); }).filter(Boolean);
+  const parents = list(agent.parents).map(function (id) { return agents.find(function (person) { return sameId(person.id, id); }); }).filter(Boolean);
   const traits = traitsFor(agent);
+  const traitDimensions = Object.entries(TRAIT_DIMENSION).filter(function ([key]) { return hasNumber(agent.traits?.[key]); }).map(function ([key, text]) {
+    const value = percent(agent.traits[key]);
+    return '<div class="trait-dimension"><span>' + text + '</span><span class="trait-dots" role="img" aria-label="' + text + ' ' + format(value) + '%">' + Array.from({ length: 5 }, function (_, i) { return '<i' + (value >= (i + 1) * 20 - 10 ? ' class="filled"' : '') + '></i>'; }).join('') + '</span><strong>' + format(value) + '</strong></div>';
+  }).join('');
   const act = ACTION[agent.action?.type] || [agent.action?.type || 'Çevresini gözlemliyor', 'eye'];
   const lifeStage = agent.lifeStage || (number(agent.age) < 3 ? 'baby' : number(agent.age) < 12 ? 'child' : number(agent.age) < 18 ? 'teen' : number(agent.age) < 58 ? 'adult' : 'elder');
   const skills = Object.entries(agent.skills || {}).filter(function ([, value]) { return Number.isFinite(Number(value)) && Number(value) > 0; }).sort(function (a, b) { return number(b[1]) - number(a[1]); }).slice(0, 5);
   const family = '<div class="detail-row"><span>Yaşadığı yer</span>' + (home ? '<button data-select-type="settlement" data-select-id="' + escapeHtml(home.id) + '" data-focus-key="home">' + escapeHtml(home.name) + '</button>' : '<strong>Yolculukta</strong>') + '</div>' +
+    detailRow('Soy nesli', format(agent.generation || 1) + '. nesil') +
+    (parents.length ? '<div class="detail-row"><span>Ebeveynleri</span><span class="family-links">' + parents.map(function (person) { return personLink(person); }).join('') + '</span></div>' : '') +
     '<div class="detail-row"><span>Eşi</span>' + personLink(partner, agent.partnerId == null ? 'Henüz yok' : 'Şu an yanında değil') + '</div>' +
     detailRow('Çocukları', children.length ? format(children.length) + ' · ' + format(livingChildren.length) + ' hayatta' : 'Henüz yok') +
+    (agent.pregnant ? detailRow('Yeni bir hayat', 'Doğuma yaklaşık ' + format(agent.pregnant.remaining) + ' gün') : '') +
     (livingChildren.length ? '<div class="citizen-list">' + livingChildren.slice(0, 6).map(function (child) { return citizenButton(child); }).join('') + '</div>' : '');
   return '<div class="person-header"><div class="portrait-frame"><canvas id="person-portrait" width="80" height="80" role="img" aria-label="' + escapeHtml(agent.name || 'Seçili kişinin') + ' piksel portresi"></canvas></div><div class="person-identity"><div class="person-role">' + escapeHtml(label(ROLE, agent.role, 'Gezgin')) + '</div><div class="person-age">' + format(agent.age, true) + ' yaş · ' + escapeHtml(label(LIFE_STAGE, lifeStage)) + '</div><div class="level-badge">' + icon('star') + 'Seviye ' + format(agent.level || 1) + '</div><div class="person-xp">' + format(agent.xp, true) + ' deneyim</div></div></div>' +
     '<div class="action-card"><span class="action-icon">' + icon(act[1]) + '</span><div><small>ŞU ANDA</small><strong>' + escapeHtml(act[0]) + '</strong></div></div>' +
     '<div class="person-actions"><button class="button ' + (snapshot.follow ? 'button-primary' : 'button-subtle') + '" data-action="follow" data-focus-key="follow">' + icon('eye') + (snapshot.follow ? 'Takip ediliyor' : 'Bu hayatı takip et') + '</button><button class="icon-button" data-action="focus-selected" data-focus-key="focus-selected" aria-label="Seçili kişiye odaklan" title="Haritada bul">' + icon('target') + '</button></div>' +
-    section('YAŞAM DENGESİ', '<div class="needs-list">' + needRow('Sağlık', agent.health, 'heart') + needRow('Tokluk', 100 - number(agent.hunger), 'wheat') + needRow('Enerji', agent.energy, 'energy') + needRow('Moral', agent.morale, 'sun') + '</div>') +
-    (traits.length ? section('MİZAÇ', '<div class="trait-list">' + traits.map(function (trait) { return '<span class="trait-chip">' + escapeHtml(label(TRAIT, trait)) + '</span>'; }).join('') + '</div>') : '') +
+    section('YAŞAM DENGESİ', '<div class="needs-list">' + needRow('Sağlık', agent.health, 'heart') + needRow('Tokluk', 100 - number(agent.hunger), 'wheat') + needRow('Enerji', agent.energy, 'energy') + needRow('Moral', agent.morale, 'sun') + '</div>' + (number(agent.sickness) > 0 ? '<div class="condition-note">' + icon('medicine') + '<span>Hastalık etkisi: ' + format(agent.sickness) + '%</span></div>' : '') + (number(agent.exposure) > 20 ? '<div class="condition-note">' + icon('snow') + '<span>Soğuğa maruz kalıyor</span></div>' : '')) +
+    (traitDimensions ? section('KALITSAL EĞİLİMLER', '<div class="trait-dimensions">' + traitDimensions + '</div>') : traits.length ? section('MİZAÇ', '<div class="trait-list">' + traits.map(function (trait) { return '<span class="trait-chip">' + escapeHtml(label(TRAIT, trait)) + '</span>'; }).join('') + '</div>') : '') +
     section('YANINDAKİLER', resourceGrid(agent.inventory)) +
     section('AİLE VE YUVA', family) +
     (skills.length ? section('GELİŞEN USTALIKLAR', skills.map(function ([key, value]) { return '<div class="skill-row"><span>' + escapeHtml(label(SKILL, key)) + '</span><strong>' + format(value, true) + '</strong></div>'; }).join('')) : '');
@@ -192,6 +211,7 @@ function settlementInspector(settlement, world) {
   const citizens = list(world.agents).filter(function (agent) { return sameId(agent.settlementId, settlement.id); });
   const buildings = list(world.buildings).filter(function (building) { return sameId(building.settlementId, settlement.id); });
   const farms = list(world.farms).filter(function (farm) { return sameId(farm.settlementId, settlement.id); });
+  const leader = citizens.find(function (agent) { return sameId(agent.id, settlement.leaderId); });
   const relations = Object.entries(settlement.relations || {}).map(function ([id, relation]) { return { settlement: list(world.settlements).find(function (other) { return sameId(other.id, id); }), relation }; }).filter(function (item) { return item.settlement; });
   const knowledge = Object.entries(KNOWLEDGE).map(function ([key, text]) {
     return '<div class="knowledge-item"><span>' + text + '</span><strong>' + format(settlement.knowledge?.[key], true) + '</strong></div>';
@@ -199,11 +219,13 @@ function settlementInspector(settlement, world) {
   const structureCounts = {};
   buildings.forEach(function (building) { structureCounts[building.type] = (structureCounts[building.type] || 0) + 1; });
   const structures = Object.entries(structureCounts).map(function ([type, count]) { return detailRow(label(BUILDING, type), format(count)); }).join('') + detailRow('Tarla', format(farms.length));
-  return '<div class="settlement-hero"><span class="settlement-color" style="--civilization-color:' + color(settlement.color) + '">' + icon('village') + '</span><div><div class="settlement-stage">' + escapeHtml(label(STAGE, settlement.stage)) + '</div><div class="settlement-detail">' + format(citizens.length) + ' insan · ' + format(buildings.length) + ' yapı</div></div></div>' +
+  return '<div class="settlement-hero"><span class="settlement-color" style="--civilization-color:' + color(settlement.color) + '">' + icon('village') + '</span><div><div class="settlement-stage">' + escapeHtml(citizens.length ? label(STAGE, settlement.stage) : 'Terk edilmiş ' + label(STAGE, settlement.stage).toLocaleLowerCase('tr')) + '</div><div class="settlement-detail">' + format(citizens.length) + ' insan · ' + format(buildings.length) + ' yapı</div></div></div>' +
     '<div class="needs-list">' + needRow('Refah', settlement.prosperity, 'sun') + '</div>' +
     '<div class="person-actions"><button class="button button-subtle" data-action="focus-selected" data-focus-key="focus-selected">' + icon('target') + 'Haritada bul</button><button class="icon-button" data-action="world-overview" data-focus-key="world-overview" aria-label="Dünya özetine dön" title="Dünya özetine dön">' + icon('compass') + '</button></div>' +
     section('ORTAK ERZAK', resourceGrid(settlement.stockpile)) +
+    section('TOPLUMUN DOKUSU', detailRow('Kuruluş', fullDate(settlement.foundedDay)) + '<div class="detail-row"><span>Önderi</span>' + personLink(leader, 'Önderi yok') + '</div>' + detailRow('Toplumsal uyum', format(settlement.cohesion) + '%') + detailRow('Huzursuzluk', format(settlement.unrest) + '%') + (number(settlement.famineDays) > 0 ? detailRow('Kıtlık', format(settlement.famineDays) + ' gündür') : '')) +
     section('BİRİKEN BİLGİ', '<div class="knowledge-grid">' + knowledge + '</div>') +
+    (list(settlement.discovered).length ? section('KEŞİFLER', '<div class="trait-list">' + list(settlement.discovered).map(function (subject) { return '<span class="trait-chip">' + escapeHtml(label(KNOWLEDGE, subject)) + '</span>'; }).join('') + '</div>') : '') +
     section('YAPILAR VE ÜRETİM', structures || '<p class="empty-settlements">Bu topluluk henüz ilk yapılarını kuruyor.</p>') +
     section('KOMŞULARLA İLİŞKİLER', relations.length ? relations.map(function ({ settlement: other, relation }) {
       const status = typeof relation === 'object' ? relation.status : 'neutral';
@@ -222,7 +244,7 @@ function tileInspector(tile, world, building = null) {
   let body = '<div class="tile-hero"><span class="tile-symbol">' + icon(building ? 'village' : biome[1]) + '</span><div><strong>' + escapeHtml(building ? label(BUILDING, building.type) : biome[0]) + '</strong><small>' + format(tile.x) + ', ' + format(tile.y) + ' · ' + escapeHtml(biome[0]) + '</small></div></div>';
   if (building) body += '<div class="needs-list">' + needRow('İnşa durumu', percent(building.progress ?? 1), 'hammer') + '</div><div class="inspector-section">' + detailRow('Yapı seviyesi', format(building.level || 1)) + '</div>';
   body += section('TOPRAĞIN DURUMU', '<div class="needs-list">' + needRow('Verimlilik', percent(tile.fertility), 'sprout') + needRow('Nem', percent(tile.moisture), 'droplet') + '</div><div style="margin-top:14px">' + detailRow('Yükselti', format(tile.elevation, true)) + detailRow('Ağaç miktarı', format(tile.trees, true)) + detailRow('Balık', format(tile.fish, true)) + (number(tile.fire) > 0 ? detailRow('Ateş', 'Bu toprak yanıyor') : '') + '</div>');
-  body += section('DOĞAL KAYNAKLAR', resourceGrid(nearResources, ['food', 'wood', 'stone', 'ore']));
+  body += section('DOĞAL KAYNAKLAR', resourceGrid(nearResources, ['food', 'wood', 'stone', 'ore'], { wood: 'Ağaç' }));
   if (localBuildings.length && !building) body += section('BURADAKİ YAPILAR', localBuildings.map(function (item) { return '<button class="settlement-row" data-select-type="building" data-select-id="' + escapeHtml(item.id) + '" data-focus-key="building-' + escapeHtml(item.id) + '"><span class="settlement-color">' + icon('village') + '</span><span class="settlement-label"><strong>' + escapeHtml(label(BUILDING, item.type)) + '</strong><small>Seviye ' + format(item.level || 1) + '</small></span><span class="settlement-arrow">' + icon('chevron-right') + '</span></button>'; }).join(''));
   if (people.length) body += section('BURADAKİ HAYATLAR', '<div class="citizen-list">' + people.slice(0, 8).map(citizenButton).join('') + '</div>');
   body += '<div class="world-observation"><div class="observation-label">' + icon('layers') + 'DÜNYANIN BİR PARÇASI</div><p>Bu toprağı ve yakınındaki kaynakları izlemek için harita katmanlarını kullan. Her müdahale, çevresindeki hayatların koşullarını değiştirir.</p></div>';
@@ -314,8 +336,8 @@ export function createUI({ getSnapshot, actions }) {
   }
   function openNewWorld() {
     randomSeed();
-    const settings = current?.world?.settings || {};
-    const population = clamp(settings.population || 96, 24, 192);
+    const settings = current?.world?.config || current?.world?.settings || {};
+    const population = clamp(settings.initialPopulation || settings.population || 96, 24, 192);
     $('world-population').value = String(Math.round(population / 8) * 8);
     setText('population-output', format($('world-population').value) + ' kişi');
     const climate = ['balanced', 'lush', 'dry'].includes(settings.climate) ? settings.climate : 'balanced';
@@ -341,7 +363,7 @@ export function createUI({ getSnapshot, actions }) {
       selectAndFocus('agent', event.agentId);
     } else if (event.settlementId != null && list(world.settlements).some(function (settlement) { return sameId(settlement.id, event.settlementId); })) {
       selectAndFocus('settlement', event.settlementId);
-    } else if (Number.isFinite(Number(event.x)) && Number.isFinite(Number(event.y))) {
+    } else if (hasNumber(event.x) && hasNumber(event.y)) {
       const point = { x: number(event.x), y: number(event.y) };
       runAction('select', { type: 'tile', ...point });
       runAction('focus', point);
@@ -354,7 +376,7 @@ export function createUI({ getSnapshot, actions }) {
     if (button.dataset.speed) { runAction('setSpeed', number(button.dataset.speed, 1)); return; }
     if (button.dataset.tool) { runAction('setTool', button.dataset.tool); return; }
     if (button.dataset.selectType) { selectAndFocus(button.dataset.selectType, button.dataset.selectId); return; }
-    if (button.dataset.eventIndex != null) { showEvent(visibleEvents[number(button.dataset.eventIndex)]); return; }
+    if (button.dataset.eventId != null) { showEvent(list(current?.world?.events).find(function (item) { return sameId(item.id, button.dataset.eventId); })); return; }
     const action = button.dataset.action;
     if (!action) return;
     const snapshot = current || getSnapshot();
@@ -521,15 +543,17 @@ export function createUI({ getSnapshot, actions }) {
       const type = Object.hasOwn(EVENT_ICON, event.type) ? event.type : 'info';
       const hasAgent = event.agentId != null && list(current.world.agents).some(function (agent) { return sameId(agent.id, event.agentId); });
       const hasSettlement = event.settlementId != null && list(current.world.settlements).some(function (settlement) { return sameId(settlement.id, event.settlementId); });
-      const focusable = hasAgent || hasSettlement || (Number.isFinite(Number(event.x)) && Number.isFinite(Number(event.y)));
+      const focusable = hasAgent || hasSettlement || (hasNumber(event.x) && hasNumber(event.y));
       const tag = focusable ? 'button' : 'article';
-      return '<' + tag + ' class="chronicle-event"' + (focusable ? ' data-event-index="' + index + '"' : '') + ' title="' + escapeHtml(fullDate(event.day) + (event.description ? ' · ' + event.description : '')) + '"><span class="event-time">' + escapeHtml(eventDate(event.day)) + '</span><span class="event-symbol ' + type + '">' + icon(EVENT_ICON[type]) + '</span><span class="event-text"><span class="event-title">' + escapeHtml(event.title || 'Dünyadan bir haber') + '</span>' + (event.description ? '<span class="event-description" style="display:block">' + escapeHtml(event.description) + '</span>' : '') + '</span><span class="event-focus">' + (focusable ? icon('arrow-up-right') : '') + '</span></' + tag + '>';
+      return '<' + tag + ' class="chronicle-event"' + (focusable ? ' data-event-id="' + escapeHtml(event.id) + '"' : '') + ' title="' + escapeHtml(fullDate(event.day) + (event.description ? ' · ' + event.description : '')) + '"><span class="event-time">' + escapeHtml(eventDate(event.day)) + '</span><span class="event-symbol ' + type + '">' + icon(EVENT_ICON[type]) + '</span><span class="event-text"><span class="event-title">' + escapeHtml(event.title || 'Dünyadan bir haber') + '</span>' + (event.description ? '<span class="event-description" style="display:block">' + escapeHtml(event.description) + '</span>' : '') + '</span><span class="event-focus">' + (focusable ? icon('arrow-up-right') : '') + '</span></' + tag + '>';
     }).join('') : '<div class="empty-chronicle">' + icon('sprout') + '<span>' + (eventFilter === 'all' ? 'Dünya yeni uyandı. İlk hikâyeler birazdan başlayacak.' : 'Bu türde henüz kayda geçen bir olay yok.') + '</span></div>';
     if (markup !== chronicleMarkup) {
       const scroll = chronicle.scrollTop;
+      const focusId = chronicle.contains(document.activeElement) ? document.activeElement.dataset.eventId : null;
       chronicle.innerHTML = markup;
       chronicleMarkup = markup;
       chronicle.scrollTop = scroll;
+      if (focusId != null) [...chronicle.querySelectorAll('[data-event-id]')].find(function (element) { return sameId(element.dataset.eventId, focusId); })?.focus({ preventScroll: true });
     }
   }
   function update(snapshot) {

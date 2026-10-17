@@ -275,6 +275,21 @@ button.chronicle-event:hover .event-focus { color: var(--accent); }
 .need-track.low span { background: #cb8e72; }
 .trait-list { display: flex; flex-wrap: wrap; gap: 5px; }
 .trait-chip { border: 1px solid #495638; border-radius: 4px; padding: 5px 6px; font-size: 9px; color: #abb99a; background: #2a3326; }
+.trait-dimensions { display: flex; flex-direction: column; gap: 9px; }
+.trait-dimension { display: flex; align-items: center; gap: 8px; font-size: 10px; color: #9cad90; }
+.trait-dimension > span:first-child { flex: 1; }
+.trait-dimension strong { width: 21px; text-align: right; font: 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; color: #a6bd91; }
+.trait-dots { display: flex; gap: 4px; }
+.trait-dots i { display: block; width: 6px; height: 6px; background: #36472d; border: 1px solid #526942; border-radius: 1px; }
+.trait-dots i.filled { background: #a2b787; border-color: #bacda0; }
+.family-links { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
+.condition-note { display: flex; align-items: center; gap: 6px; padding: 8px; margin-top: 12px; border: 1px solid #755c3e; border-radius: 5px; background: #45372388; font-size: 9px; color: #cbb28b; }
+.condition-note .icon { width: 13px; height: 13px; }
+.occupation-list { display: flex; flex-direction: column; gap: 9px; }
+.occupation-row { display: grid; grid-template-columns: 63px 1fr 24px; gap: 8px; align-items: center; font-size: 9px; color: #9fb18f; }
+.occupation-row strong { text-align: right; font-size: 9px; font-weight: 500; color: #b2c69e; }
+.occupation-track { display: block; height: 4px; background: #34472c; border-radius: 2px; overflow: hidden; }
+.occupation-track i { display: block; height: 100%; background: #839f70; border-radius: 2px; }
 .detail-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 9px; margin-bottom: 9px; font-size: 10px; line-height: 1.5; color: #869d78; }
 .detail-row:last-child { margin-bottom: 0; }
 .detail-row strong { font-size: 10px; font-weight: 500; color: #c2d0b5; text-align: right; max-width: 68%; }
