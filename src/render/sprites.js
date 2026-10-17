@@ -81,12 +81,19 @@ const rect = (ctx, color, x, y, w, h) => {
 };
 
 function polygon(ctx, color, points) {
+  // Scan-line rasterization keeps diagonal rocks and tree boughs pixel sharp.
+  const top = Math.floor(Math.min(...points.map(point => point[1])));
+  const bottom = Math.ceil(Math.max(...points.map(point => point[1])));
   ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(points[0][0], points[0][1]);
-  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
-  ctx.closePath();
-  ctx.fill();
+  for (let y = top; y < bottom; y++) {
+    const intersections = [];
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i], b = points[(i + 1) % points.length], scan = y + 0.5;
+      if ((a[1] <= scan && b[1] > scan) || (b[1] <= scan && a[1] > scan)) intersections.push(a[0] + (scan - a[1]) / (b[1] - a[1]) * (b[0] - a[0]));
+    }
+    intersections.sort((a, b) => a - b);
+    for (let i = 0; i + 1 < intersections.length; i += 2) ctx.fillRect(Math.round(intersections[i]), y, Math.round(intersections[i + 1]) - Math.round(intersections[i]), 1);
+  }
 }
 
 function pixelLine(ctx, color, x0, y0, x1, y1, thickness = 1) {
@@ -148,10 +155,7 @@ export function getTreeSprite(kind = 0, variant = 0, season = 'spring', small = 
   kind %= 4; variant %= 6;
   return cached(`tree:${kind}:${variant}:${season}:${small}`, 36, 48, 18, 42, ctx => {
     const seed = variant * 171 + kind * 53;
-    const shrink = small ? 0.68 : 1;
-    ctx.translate(18, 42);
-    ctx.scale(shrink, shrink);
-    ctx.translate(-18, -42);
+    // The small version is downsampled with nearest-neighbor after painting.
     rect(ctx, '#334d383b', 7, 39, 23, 4);
     rect(ctx, '#334d3825', 10, 43, 16, 1);
     rect(ctx, '#574532', 16, 22, 5, 19);
@@ -206,6 +210,12 @@ export function getTreeSprite(kind = 0, variant = 0, season = 'spring', small = 
         rect(ctx, '#dce3cf', 6, crownY + 7, 9, 2);
         rect(ctx, '#c8d6c0', 21, crownY + 4, 7, 3);
       }
+    }
+    if (small) {
+      const copy = makeCanvas(36, 48);
+      copy.ctx.drawImage(ctx.canvas, 0, 0);
+      ctx.clearRect(0, 0, 36, 48);
+      ctx.drawImage(copy.canvas, 6, 14, 24, 32);
     }
   });
 }
@@ -460,7 +470,8 @@ export function getBuildingSprite(building, color = '#cbaa70', season = 'spring'
 export function getFarmSprite(farm, season = 'spring') {
   const growth = Math.min(4, Math.floor((farm.growth || 0) * 4));
   const wet = farm.water > 0.4;
-  return cached(`farm:${growth}:${farm.ripe ? 1 : 0}:${wet}:${season}`, 20, 21, 10, 15, ctx => {
+  const vegetables = farm.crop === 'vegetables';
+  return cached(`farm:${growth}:${farm.ripe ? 1 : 0}:${wet}:${season}:${vegetables}`, 20, 21, 10, 15, ctx => {
     rect(ctx, '#81734d', 1, 8, 18, 12);
     rect(ctx, wet ? '#6c6144' : '#938055', 2, 9, 16, 10);
     for (let row = 0; row < 3; row++) {
@@ -468,10 +479,11 @@ export function getFarmSprite(farm, season = 'spring') {
       if (!growth) continue;
       for (let col = 0; col < 4; col++) {
         const x = 3 + col * 4, y = 11 + row * 3;
-        const crop = farm.ripe || growth > 2 ? '#d8bd68' : '#7d9d51';
+        const crop = vegetables ? '#91aa5b' : farm.ripe || growth > 2 ? '#d8bd68' : '#7d9d51';
         rect(ctx, '#5d753d', x, y - growth, 1, growth + 1);
         rect(ctx, crop, x - 1, y - growth, 3, 1);
-        if (growth > 2) { rect(ctx, crop, x - 1, y - growth - 2, 1, 2); rect(ctx, '#e9d38a', x, y - growth - 3, 1, 2); }
+        if (growth > 2 && !vegetables) { rect(ctx, crop, x - 1, y - growth - 2, 1, 2); rect(ctx, '#e9d38a', x, y - growth - 3, 1, 2); }
+        else if (growth > 1 && vegetables) { rect(ctx, '#afbc70', x - 1, y - growth - 1, 3, 2); rect(ctx, '#658849', x, y - growth, 1, 2); }
       }
     }
     rect(ctx, '#bdab78', 0, 8, 1, 12);
@@ -510,17 +522,21 @@ function appearanceOf(agent) {
 }
 
 export function getAgentSprite(agent, time = 0, options = {}) {
-  const a = appearanceOf(agent), stage = getLifeStage(agent), dir = normalizeDirection(agent);
+  const a = appearanceOf(agent), stage = getLifeStage(agent), rawDir = normalizeDirection(agent);
+  const dir = rawDir === 3 ? 1 : rawDir;
   const tier = (agent.level || 1) >= 10 ? 4 : (agent.level || 1) >= 7 ? 3 : (agent.level || 1) >= 4 ? 2 : (agent.level || 1) >= 2 ? 1 : 0;
   let action = typeof agent.action === 'string' ? agent.action : agent.action?.type || 'idle';
   if (options.action) action = options.action;
-  const moving = ['walk', 'migrate', 'flee', 'hunt'].includes(action) || (Math.abs(agent.vx || 0) + Math.abs(agent.vy || 0) > 0.025 && !['rest', 'eat', 'study'].includes(action));
+  const hasMotion = Math.abs(agent.vx || 0) + Math.abs(agent.vy || 0) > 0.025;
+  const moving = !options.still && (['walk', 'migrate', 'flee', 'hunt'].includes(action) || (hasMotion && !['rest', 'eat', 'study'].includes(action)));
+  if (hasMotion && !options.still && !['migrate', 'flee', 'hunt'].includes(action)) action = 'walk';
   const animated = moving || ['farm', 'chop', 'mine', 'build', 'craft', 'fight', 'gather', 'heal', 'fish', 'trade'].includes(action);
   const phase = options.still ? 0 : animated ? Math.floor(time * (action === 'flee' || action === 'fight' ? 9 : 6) + (a.seed % 7)) % 4 : Math.floor(time * 1.2 + (a.seed % 3)) % 2;
   const role = agent.role || 'gatherer';
   const isMale = !['female', 'f', 'woman', 'kadın'].includes(String(agent.sex).toLowerCase());
-  const key = `person:${a.skin}:${a.hair}:${a.shirt}:${a.accent}:${a.hairStyle}:${a.body}:${a.beard}:${a.hat}:${isMale}:${stage}:${tier}:${role}:${action}:${dir}:${phase}:${moving}`;
+  const key = `person:${a.skin}:${a.hair}:${a.shirt}:${a.accent}:${a.hairStyle}:${a.body}:${a.beard}:${a.hat}:${isMale}:${stage}:${tier}:${role}:${action}:${rawDir}:${phase}:${moving}`;
   return cached(key, 34, 38, 17, 34, ctx => {
+    if (rawDir === 3) { ctx.translate(34, 0); ctx.scale(-1, 1); }
     const child = stage === 'child', baby = stage === 'baby', teen = stage === 'teen', elder = stage === 'elder';
     const short = a.body % 4 === 0;
     const height = baby ? 10 : child ? 15 : teen ? 19 : elder ? 20 : short ? 21 : 23;
