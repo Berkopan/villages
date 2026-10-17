@@ -30,11 +30,15 @@ const TERRAIN_COLORS = {
 // thousands of independent Canvas bitmaps alive can exhaust browser canvas/GPU
 // backing stores; when that happens the cached terrain sprites may turn fully
 // transparent, leaving only shorelines and actors visible on the main map.
+// Keep the opaque ground textures separate from trees, buildings, and people:
+// a burst of settlement construction must never evict every ground variant.
+const terrainAtlas = new Map();
 const environmentAtlas = new Map();
 const peopleAtlas = new Map();
-const MAX_ENVIRONMENT_SPRITES = 512;
+const MAX_TERRAIN_SPRITES = 128;
+const MAX_ENVIRONMENT_SPRITES = 384;
 const MAX_PERSON_SPRITES = 1024;
-const MAX_ATLAS = MAX_ENVIRONMENT_SPRITES + MAX_PERSON_SPRITES;
+const MAX_ATLAS = MAX_TERRAIN_SPRITES + MAX_ENVIRONMENT_SPRITES + MAX_PERSON_SPRITES;
 
 export function hashValue(value) {
   const text = String(value ?? 0);
@@ -65,7 +69,8 @@ function makeCanvas(width, height) {
 
 function cached(key, width, height, anchorX, anchorY, paint) {
   const person = key.startsWith('person:');
-  const bucket = person ? peopleAtlas : environmentAtlas;
+  const ground = key.startsWith('ground:');
+  const bucket = ground ? terrainAtlas : person ? peopleAtlas : environmentAtlas;
   const cachedSprite = bucket.get(key);
   if (cachedSprite) {
     // LRU eviction avoids retaining long-dead generations at the expense of
@@ -77,7 +82,7 @@ function cached(key, width, height, anchorX, anchorY, paint) {
   const { canvas, ctx } = makeCanvas(width, height);
   paint(ctx);
   const sprite = { canvas, width, height, anchorX, anchorY };
-  const limit = person ? MAX_PERSON_SPRITES : MAX_ENVIRONMENT_SPRITES;
+  const limit = ground ? MAX_TERRAIN_SPRITES : person ? MAX_PERSON_SPRITES : MAX_ENVIRONMENT_SPRITES;
   if (bucket.size >= limit) bucket.delete(bucket.keys().next().value);
   bucket.set(key, sprite);
   return sprite;
@@ -95,8 +100,8 @@ function cached(key, width, height, anchorX, anchorY, paint) {
 export function recoverTerrainSprites(season = 'spring') {
   const suffix = ':' + normalizeSeason(season);
   const candidates = [];
-  for (const [key, sprite] of environmentAtlas) {
-    if (key.startsWith('ground:') && key.endsWith(suffix)) candidates.push(sprite);
+  for (const [key, sprite] of terrainAtlas) {
+    if (key.endsWith(suffix)) candidates.push(sprite);
   }
   if (!candidates.length) return false;
   const step = Math.max(1, Math.floor(candidates.length / 8));
@@ -107,6 +112,7 @@ export function recoverTerrainSprites(season = 'spring') {
     } catch {
       // A lost or unavailable bitmap must not be reused for the next ground.
     }
+    terrainAtlas.clear();
     environmentAtlas.clear();
     return true;
   }
@@ -793,6 +799,6 @@ export function drawPortrait(ctx, agent, size = 64, time = 0) {
 }
 
 export function getAtlasStats() {
-  return { sprites: environmentAtlas.size + peopleAtlas.size, people: peopleAtlas.size, max: MAX_ATLAS };
+  return { sprites: terrainAtlas.size + environmentAtlas.size + peopleAtlas.size, people: peopleAtlas.size, max: MAX_ATLAS };
 }
 
