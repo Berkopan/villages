@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Villages · Piksel Atölyesi</title>
+  <style>
+    :root { color-scheme: dark; font-family: 'Trebuchet MS',system-ui,sans-serif; background:#112527; color:#e8dec2; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:40px max(24px,calc((100vw - 1260px)/2)); }
+    a { color:#e5c687; text-decoration:none; }
+    .eyebrow { font-size:11px; letter-spacing:3px; color:#9fb7a2; text-transform:uppercase; }
+    h1 { margin:12px 0; font-family:Georgia,serif; font-weight:400; font-size:44px; letter-spacing:-1px; }
+    .intro { max-width:700px; color:#aabeb0; line-height:1.7; font-size:14px; }
+    .toolbar { display:flex; gap:18px; align-items:center; margin:24px 0; flex-wrap:wrap; }
+    button,select { background:#263d3b; color:#e8dec2; border:1px solid #536457; padding:10px 14px; border-radius:5px; font:inherit; font-size:12px; }
+    button { cursor:pointer; }
+    h2 { margin:42px 0 8px; font-weight:500; font-size:20px; }
+    .note { margin:0 0 20px; color:#90a799; font-size:12px; line-height:1.6; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:9px; }
+    .grid.large { grid-template-columns:repeat(auto-fill,minmax(154px,1fr)); }
+    .card { padding:8px; background:#1b3433; border:1px solid #344c42; border-radius:5px; min-width:0; text-align:center; }
+    .card canvas { display:block; width:96px; height:96px; margin:auto; image-rendering:pixelated; }
+    .large .card canvas { width:144px; height:144px; }
+    .card strong { font-weight:400; font-size:11px; display:block; margin:6px 0 4px; color:#d1c7a9; }
+    .card small { font-size:9px; color:#8fa893; letter-spacing:.3px; }
+    footer { border-top:1px solid #344c42; padding-top:20px; margin-top:44px; color:#8ea393; font-size:11px; }
+    @media(max-width:600px) { body { padding:24px 16px; } h1 { font-size:34px; } }
+  </style>
+</head>
+<body>
+  <a href="../index.html">← Yaşayan dünyaya dön</a>
+  <p class="eyebrow">VILLAGES / GÖRSEL KATALOG</p>
+  <h1>Bir dünya, binlerce yüz.</h1>
+  <p class="intro">Oyundaki gerçek piksel çizicisinin canlı kontak sayfası. İnsanlar aynı görünüm genlerini yaş aldıkça korur; kıyafet, saç, beden, meslek ve ustalık birbirinden bağımsızdır. Her varlık aşağıdakiyle aynı koddan çizilir.</p>
+  <div class="toolbar">
+    <button id="pause" type="button">Animasyonları duraklat</button>
+    <label>Mevsim <select id="season"><option value="spring">İlkbahar</option><option value="summer">Yaz</option><option value="autumn">Sonbahar</option><option value="winter">Kış</option></select></label>
+    <span id="atlas" class="note" aria-live="off"></span>
+  </div>
+  <h2>Bir ömrün beş evresi</h2>
+  <p class="note">Aynı kişinin teni ve kimliği korunur. Boy, baş–beden oranı, saç ve duruş değişir.</p>
+  <div class="grid" id="ages"></div>
+  <h2>Deneyim görünür iz bırakır</h2>
+  <p class="note">Kuşak, çapraz askı ve çanta, pelerin, sonra altın omuzluklar. Ustalık yalnızca bir sayı değildir.</p>
+  <div class="grid" id="levels"></div>
+  <h2>Birbirine benzemeyen komşular</h2>
+  <p class="note">8 ten tonu · 10 saç tonu · 10 saç biçimi · 12 kıyafet paleti · 8 vurgu rengi · 16 beden/giyim varyantı · farklı başlık ve sakallar.</p>
+  <div class="grid" id="people"></div>
+  <h2>Bir köyü yaşatan işler</h2>
+  <p class="note">Her işin aracı, hareketi ve ritmi farklıdır. Yolculuk sırasında eylem yürüyüşe dönüşür; iş etkileri yalnız hedefe varıldığında görünür.</p>
+  <div class="grid" id="actions"></div>
+  <h2>Barınaktan kente</h2>
+  <p class="note">13 yapı türü, ortak çatı/ahşap/taş dili, kültür renkleri ve gerçek inşa ilerlemesini gösteren iskeleler.</p>
+  <div class="grid large" id="buildings"></div>
+  <h2>Mevsimlerin dokusu</h2>
+  <p class="note">İğne yapraklı ve geniş yapraklı ağaçlar, küçük fidanlar, taş/mineral, meyve, buğday, sebze ve yaban hayatı.</p>
+  <div class="grid" id="nature"></div>
+  <footer>Haricî görsel veya sprite paketi kullanılmadı. Bu katalog yalnızca görsel denetim içindir; dünya simülasyonunu çalıştırmaz.</footer>
+  <script type="module">
+    import {getAgentSprite,getTreeSprite,getPropSprite,getBuildingSprite,getFarmSprite,getAnimalSprite,drawSprite,getAtlasStats} from '../src/render/sprites.js';
+    const records=[]; let season='spring',paused=false,time=0,last=0;
+    const base={id:7,name:'Deniz',sex:'female',age:28,level:1,role:'gatherer',direction:2,action:{type:'idle'},appearance:{skin:2,hair:1,hairStyle:3,outfit:2,accent:0,variant:7,beard:0,hat:0}};
+    function card(section,title,subtitle,draw,large=false){
+      const element=document.createElement('div'); element.className='card';
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=large?144:96;
+      const strong=document.createElement('strong');strong.textContent=title;
+      const small=document.createElement('small');small.textContent=subtitle;
+      element.append(canvas,strong,small);document.getElementById(section).append(element);
+      records.push({ctx:canvas.getContext('2d'),size:canvas.width,draw});
+    }
+    const person=(agent)=>(ctx,size,t)=>drawSprite(ctx,getAgentSprite(agent,t),size/2,size-13,3);
+    for(const [age,label] of [[1,'Bebek'],[7,'Çocuk'],[15,'Genç'],[28,'Yetişkin'],[71,'Yaşlı']])card('ages',label,`${age} yaş`,person({...base,age}));
+    for(const level of [1,2,4,7,10])card('levels',`Seviye ${level}`,['','Çırak','Kuşaklı','','Usta','','','Deneyimli','','','Saygın'][level],person({...base,level}));
+    for(let i=0;i<36;i++){
+      const agent={...base,id:i+20,sex:i%2?'female':'male',age:[23,35,19,63,47,29][i%6],level:1+i%5,direction:[2,1,3][i%3],appearance:{skin:i%8,hair:(i*3)%10,hairStyle:i%10,outfit:(i*5)%12,accent:i%8,variant:i%16,beard:i%4,hat:(i*3)%5}};
+      card('people',`Komşu ${String(i+1).padStart(2,'0')}`,`${agent.age} yaş · Sv. ${agent.level}`,person(agent));
+    }
+    const jobs=[['walk','gatherer','Yürüme'],['gather','gatherer','Toplama'],['farm','farmer','Tarım'],['chop','lumberjack','Odunculuk'],['mine','miner','Madencilik'],['fish','fisher','Balıkçılık'],['hunt','hunter','Avcılık'],['build','builder','İnşaat'],['craft','smith','Demircilik'],['heal','healer','Şifacılık'],['trade','trader','Ticaret'],['fight','warrior','Savaş'],['migrate','gatherer','Göç'],['flee','gatherer','Kaçış'],['eat','gatherer','Yemek'],['rest','gatherer','Dinlenme'],['study','scholar','Araştırma']];
+    jobs.forEach(([action,role,label],i)=>card('actions',label,role,person({...base,id:77+i,sex:i%2?'female':'male',role,level:4,direction:i%3===0?3:2,action:{type:action},appearance:{...base.appearance,outfit:i%12,hairStyle:i%8,hat:i%5,beard:i%4}})));
+    const structures=[['campfire','Kamp ateşi'],['hut','Kulübe'],['house','Ev'],['granary','Ambar'],['well','Kuyu'],['lumberyard','Odunhane'],['mine','Maden'],['workshop','Atölye'],['market','Pazar'],['barracks','Kışla'],['watchtower','Gözetleme kulesi'],['hall','Toplantı salonu'],['shrine','Tapınak']];
+    structures.forEach(([type,label],i)=>card('buildings',label,type,(ctx,size)=>drawSprite(ctx,getBuildingSprite({id:i,type,level:2,progress:1},['#a9ad73','#7ca6a1','#ba8570'][i%3],season),size/2,size-14,2),true));
+    for(const progress of [.1,.4,.7])card('buildings',`İnşa %${Math.round(progress*100)}`,'Devam eden yapı',(ctx,size)=>drawSprite(ctx,getBuildingSprite({type:'house',level:1,progress},'#adad75',season),size/2,size-14,2),true);
+    for(let i=0;i<4;i++)card('nature',['Çam','Meşe','Huş','Meyve ağacı'][i],'Mevsimsel taç',(ctx,size)=>drawSprite(ctx,getTreeSprite(i,i,season),size/2,size-12,2));
+    for(const type of ['rock','ore','bush','flowers','reeds','lily'])card('nature',type,'Çevre ayrıntısı',(ctx,size)=>drawSprite(ctx,getPropSprite(type,2,season),size/2,size-18,3));
+    for(const growth of [0,.25,.6,1])card('nature',`Buğday %${growth*100}`,'Büyüyen tarla',(ctx,size)=>drawSprite(ctx,getFarmSprite({growth,ripe:growth===1,water:.7,crop:'wheat'},season),size/2,size-28,3));
+    card('nature','Sebze','Sulanan tarla',(ctx,size)=>drawSprite(ctx,getFarmSprite({growth:.8,ripe:true,water:.7,crop:'vegetables'},season),size/2,size-28,3));
+    for(const species of ['deer','boar','wolf'])card('nature',species,'Simüle edilen canlı',(ctx,size,t)=>drawSprite(ctx,getAnimalSprite({id:2,species,direction:1},t),size/2,size-14,3));
+    document.getElementById('pause').addEventListener('click',event=>{paused=!paused;event.target.textContent=paused?'Animasyonları sürdür':'Animasyonları duraklat';});
+    document.getElementById('season').addEventListener('change',event=>season=event.target.value);
+    function frame(now){
+      const elapsed=Math.min(.05,(now-last)/1000);last=now;if(!paused)time+=elapsed;
+      for(const {ctx,size,draw}of records){
+        ctx.imageSmoothingEnabled=false;ctx.fillStyle='#1b3433';ctx.fillRect(0,0,size,size);
+        ctx.fillStyle='#2a4540';ctx.fillRect(8,size-22,size-16,4);ctx.fillStyle='#29423a';ctx.fillRect(15,size-18,size-30,2);
+        draw(ctx,size,time);
+      }
+      const stats=getAtlasStats();document.getElementById('atlas').textContent=`${stats.sprites} önbellekli sprite · ${stats.people} insan karesi`;
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
