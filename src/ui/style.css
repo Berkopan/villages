@@ -683,3 +683,8 @@ kbd { min-width: 52px; padding: 5px 6px; color: #c4d6b1; background: #31432a; bo
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* Compact, keyboard-accessible language switcher. */
+.language-picker select { min-width: 49px; height: 34px; padding: 0 5px; color: var(--accent-bright); background: var(--panel-soft); border-color: var(--line); font-size: 11px; font-weight: 700; }
+.language-picker select:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
+@media (max-width: 760px) { .language-picker select { min-width: 43px; height: 31px; padding: 0 3px; font-size: 10px; } }
