@@ -38,6 +38,10 @@ test('save validation rejects corrupted worlds before any replacement', () => {
     world => { world.agents[1].id = world.agents[0].id; },
     world => { world.tiles[0].food = -1; },
     world => { world.agents[0].action = null; },
+    world => { world.agents[0].path = [{ x: -1, y: 0 }]; },
+    world => { world.agents[0].traits.courage = 'unbounded'; },
+    world => { world.agents[0].inventory.tools = -5; },
+    world => { world.agents[0].pendingAction = { type: 'teleport' }; },
     world => { world.events = 'broken'; },
   ];
   for (const corrupt of cases) {
