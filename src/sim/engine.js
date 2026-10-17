@@ -73,7 +73,7 @@ export function createWorld(options = {}) {
     const agent = createAgent(world, { x: tile.x + between(world, 0.2, 0.8), y: tile.y + between(world, 0.2, 0.8), age, sex, familyName: family[0]?.familyName });
     agent.originX = site.x + 0.5; agent.originY = site.y + 0.5;
     if (cohort === 1 && family[0]) { agent.partnerId = family[0].id; family[0].partnerId = agent.id; agent.birthCooldown = 12; }
-    if ((cohort === 2 || cohort === 3) && family[0] && family[1]) {
+    if ((cohort === 2 || cohort === 3) && family[0] && family[1] && Math.min(family[0].age, family[1].age) - agent.age >= 18) {
       agent.parents = [family[1].id, family[0].id]; agent.generation = 2;
       family[0].childrenIds.push(agent.id); family[1].childrenIds.push(agent.id);
     }
@@ -146,7 +146,8 @@ function freeBuildTile(world, settlement, radius = 7, fertile = false) {
     for (let x = Math.max(1, settlement.x - radius); x <= Math.min(world.width - 2, settlement.x + radius); x++) {
       const tile = getTile(world, x, y);
       if (!isWalkable(tile) || tile.fire > 0.1 || tile.biome === 'snow' || tile.biome === 'sand' || tile.region !== getTile(world, settlement.x, settlement.y)?.region) continue;
-      if (world.buildings.some(building => Math.hypot(building.x - x, building.y - y) < (fertile ? 1 : 1.8)) || world.farms.some(farm => farm.x === x && farm.y === y)) continue;
+      if (world.buildings.some(building => Math.hypot(building.x - x, building.y - y) < (fertile ? 2.1 : 2.8)) || world.farms.some(farm => Math.hypot(farm.x - x, farm.y - y) < (fertile ? 0.5 : 1.8))) continue;
+      if (!fertile && [-1, 0, 1].some(dy => [-1, 0, 1].some(dx => !isWalkable(getTile(world, x + dx, y + dy))))) continue;
       const d = Math.hypot(x - settlement.x, y - settlement.y);
       if (d > radius || d < 1.5) continue;
       const candidate = (fertile ? tile.fertility * 10 - tile.trees * 0.3 : -tile.trees * 0.25) - Math.abs(d - (fertile ? 4 : 2.5)) + between(world, 0, 0.3);
@@ -162,12 +163,11 @@ function pay(stockpile, cost) { for (const [resource, amount] of Object.entries(
 function requestBuilding(world, settlement, type) {
   const cost = BUILDING_COSTS[type];
   if (!cost || !canPay(settlement.stockpile, cost)) return null;
-  const tile = freeBuildTile(world, settlement, settlement.stage === 'city' ? 11 : 8);
+  const tile = freeBuildTile(world, settlement, Math.min(14, 7 + Math.floor(Math.sqrt(settlement.population) / 2)));
   if (!tile) return null;
   pay(settlement.stockpile, cost);
   const building = { id: world.nextId++, type, x: tile.x, y: tile.y, level: 1, progress: 0, health: 100, settlementId: settlement.id, occupants: [], createdDay: world.day };
   world.buildings.push(building);
-  tile.trees = Math.max(0, tile.trees - 1.5);
   return building;
 }
 
@@ -191,7 +191,7 @@ function roleOptions(world, agent, settlement) {
     { role: 'builder', weight: incomplete ? 4 : 0 },
     { role: 'smith', weight: settlement && hasBuilding(world, settlement, 'workshop') && stock.tools < population * 0.3 ? 2.2 : 0 },
     { role: 'healer', weight: settlement && (stock.medicine < population * 0.1 || nearbyAgents(world, agent.x, agent.y, 8).some(other => other.sickness > 0 || other.health < 65)) ? 1.1 + agent.traits.sociability : 0.03 },
-    { role: 'trader', weight: settlement && world.settlements.length > 1 && hasBuilding(world, settlement, 'market') ? 1.15 : 0 },
+    { role: 'trader', weight: settlement && world.settlements.length > 1 && hasBuilding(world, settlement, 'market') && world.day >= (agent.tradeCooldown ?? 0) && agent.health > 65 && agent.age >= 18 && agent.age < 58 && !agent.pregnant ? 0.8 : 0 },
     { role: 'warrior', weight: hasWar ? 1 + agent.traits.courage * 6 : settlement && hasBuilding(world, settlement, 'barracks') ? agent.traits.courage * 0.7 : 0 },
     { role: 'scholar', weight: settlement && stock.food > population * 2 ? 0.3 + agent.traits.curiosity * 1.2 : 0 },
   ];
@@ -262,7 +262,7 @@ function decideAction(world, agent) {
   }
   if (agent.hunger > 44 && foodAction(world, agent)) return;
   if (agent.energy < 22 || (agent.health < 55 && agent.hunger < 65)) {
-    const home = findHomePoint(world, agent);
+    const home = agent.pendingAction || agent.destination ? { x: agent.x, y: agent.y } : findHomePoint(world, agent);
     if (setAction(world, agent, 'rest', home.x, home.y, 3.4)) return;
   }
   if (agent.pendingAction && agent.hunger < 60 && agent.energy > 22) {
@@ -285,7 +285,9 @@ function decideAction(world, agent) {
     if (setAction(world, agent, 'walk', settlement.x + 0.5, settlement.y + 0.5, 0.15, { deposit: true })) return;
   }
   if (agent.social < 30 || chance(world, 0.045 + agent.traits.sociability * 0.07)) {
-    const friend = nearbyAgents(world, agent.x, agent.y, 7).find(other => other.id !== agent.id && (!agent.settlementId || other.settlementId === agent.settlementId));
+    const neighbors = nearbyAgents(world, agent.x, agent.y, 7).filter(other => other.id !== agent.id && (!agent.settlementId || other.settlementId === agent.settlementId));
+    const potentialPartners = !agent.partnerId && agent.age >= 18 ? neighbors.filter(other => !other.partnerId && other.sex !== agent.sex && other.age >= 18 && Math.abs(other.age - agent.age) < 19 && !agent.parents.includes(other.id) && !other.parents.includes(agent.id) && !agent.parents.some(id => other.parents.includes(id))) : [];
+    const friend = potentialPartners.length && chance(world, 0.72) ? pick(world, potentialPartners) : pick(world, neighbors);
     if (friend && setAction(world, agent, 'socialize', friend.x, friend.y, between(world, 0.8, 1.8), { friendId: friend.id })) return;
   }
   if (enemy && agent.age >= 16 && setAction(world, agent, 'fight', enemy.x, enemy.y, 0.7, { enemyId: enemy.id })) return;
@@ -346,12 +348,14 @@ function completeAction(world, agent) {
     agent.morale = Math.min(100, agent.morale + 1.5);
   } else if (action.type === 'walk') {
     if (action.deposit) depositInventory(world, agent, settlement);
+    if (action.tradeReturn) { agent.pendingAction = null; agent.tradeCooldown = world.day + 24; }
   } else if (action.type === 'gather' || action.type === 'chop' || action.type === 'mine' || action.type === 'fish') {
     const tile = world.tiles[action.tileIndex];
     const source = action.resource;
     if (tile && source && distance(agent, tile) < 3.3) {
       const output = source === 'trees' ? 'wood' : source === 'fish' ? 'food' : source;
-      const amount = Math.min(tile[source], (source === 'trees' ? 2.3 : source === 'stone' || source === 'ore' ? 2.4 : source === 'fish' ? 3.4 : 2.7) * ability * juvenile);
+      const infrastructure = settlement && source === 'trees' && hasBuilding(world, settlement, 'lumberyard') ? 1.2 : settlement && (source === 'stone' || source === 'ore') && hasBuilding(world, settlement, 'mine') ? 1.2 : 1;
+      const amount = Math.min(tile[source], (source === 'trees' ? 2.3 : source === 'stone' || source === 'ore' ? 2.4 : source === 'fish' ? 3.4 : 2.7) * ability * juvenile * infrastructure);
       tile[source] -= amount; agent.inventory[output] += amount; worked = amount > 0;
       if (worked) {
         addEffect(world, output === 'food' ? 'food' : output === 'wood' ? 'wood' : 'stone', agent.x, agent.y, `+${Math.max(1, Math.round(amount))}`);
@@ -363,7 +367,7 @@ function completeAction(world, agent) {
     if (action.operation === 'plant' && settlement && settlement.stockpile.wood >= 2 && settlement.stockpile.food >= 1) {
       const tile = world.tiles[action.tileIndex];
       if (tile && !world.farms.some(item => item.x === tile.x && item.y === tile.y) && !world.buildings.some(item => item.x === tile.x && item.y === tile.y)) {
-        settlement.stockpile.wood -= 2; settlement.stockpile.food -= 1; tile.trees = Math.max(0, tile.trees - 1);
+        settlement.stockpile.wood -= 2; settlement.stockpile.food -= 1; agent.inventory.wood += tile.trees * 0.5; tile.trees = 0;
         world.farms.push({ id: world.nextId++, x: tile.x, y: tile.y, settlementId: settlement.id, crop: chance(world, 0.65) ? 'wheat' : 'vegetables', growth: 0.08, water: Math.max(0.55, tile.moisture), health: 1, ripe: false, ripeDay: null, harvests: 0 });
         worked = true; changeKnowledge(settlement, 'agriculture', 2);
       }
@@ -383,8 +387,23 @@ function completeAction(world, agent) {
   } else if (action.type === 'build') {
     const building = world.buildings.find(item => item.id === action.buildingId);
     if (building && building.progress < 1) {
+      if (building.ruined && !building.repairCostPaid) {
+        const cost = Object.fromEntries(Object.entries(BUILDING_COSTS[building.type]).map(([resource, amount]) => [resource, amount * 0.5]));
+        if (!settlement || !canPay(settlement.stockpile, cost)) { stopAction(agent, 0.3); return; }
+        pay(settlement.stockpile, cost); building.repairCostPaid = true;
+      }
       const wasIncomplete = building.progress < 1;
-      building.progress = Math.min(1, building.progress + 0.2 * ability);
+      let cleared = 0;
+      // Building footprint preparation is actual labour and produces actual timber.
+      // Trees cannot merely disappear under a decorative roof.
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const tile = getTile(world, building.x + dx, building.y + dy);
+        if (!tile || cleared >= 6 * ability) continue;
+        const amount = Math.min(tile.trees, 6 * ability - cleared);
+        tile.trees -= amount; cleared += amount;
+      }
+      agent.inventory.wood += cleared * 0.7;
+      if (cleared < 0.2) building.progress = Math.min(1, building.progress + 0.2 * ability);
       changeKnowledge(settlement, 'masonry', 1.2); worked = true;
       if (wasIncomplete && building.progress >= 1) {
         addEffect(world, 'spark', agent.x, agent.y, '✓');
@@ -428,7 +447,7 @@ function completeAction(world, agent) {
       changeKnowledge(settlement, 'civics', 0.6);
     }
   } else if (action.type === 'study' && settlement) {
-    changeKnowledge(settlement, action.subject, 2.5 + agent.traits.curiosity * 3); agent.social = Math.min(100, agent.social + 5); worked = true;
+    changeKnowledge(settlement, action.subject, (2.5 + agent.traits.curiosity * 3) * (hasBuilding(world, settlement, 'hall') ? 1.25 : 1)); agent.social = Math.min(100, agent.social + 5); worked = true;
   } else if (action.type === 'trade') worked = finishTrade(world, agent, settlement);
   else if (action.type === 'fight') worked = finishFight(world, agent, settlement);
   else if (action.type === 'migrate') finishMigration(world, agent);
@@ -454,13 +473,13 @@ function stepAgent(world, agent, dt) {
   if (agent.energy < 4) agent.health -= dt * 0.2;
   const tile = getTile(world, agent.x, agent.y);
   if (tile?.fire > 0) { agent.health -= tile.fire * dt * 9; agent.lastDamageCause = 'fire'; if (agent.action.type !== 'flee') stopAction(agent); }
-  if (agent.pregnant) agent.pregnant.remaining -= dt;
+  if (agent.pregnant) agent.pregnant.remaining = Math.max(0, agent.pregnant.remaining - dt);
   agent.birthCooldown = Math.max(0, agent.birthCooldown - dt);
   agent.decisionIn -= dt;
   if (agent.health <= 0) return;
   // Emergency needs interrupt work; a route to food itself is allowed to finish.
   if ((agent.hunger > 85 && !['eat', 'gather', 'fish', 'farm', 'flee'].includes(agent.action.type)) || (agent.energy < 10 && agent.action.type === 'trade')) {
-    if (agent.action.type === 'trade') agent.pendingAction = { ...agent.action, progress: 0 };
+    if (agent.action.type === 'trade' || agent.action.tradeReturn) agent.pendingAction = { ...agent.action, progress: 0 };
     stopAction(agent);
   }
   if (agent.action.type === 'idle') { if (agent.decisionIn <= 0) decideAction(world, agent); return; }
@@ -492,7 +511,7 @@ function stepAgent(world, agent, dt) {
 
 export function stepWorld(world, dt = 0.1) {
   if (!Number.isFinite(dt) || dt <= 0 || dt > 1) throw new RangeError('Simulation dt must be within (0, 1] days.');
-  world.tick++; world.day += dt;
+  world.tick++; world.day = Math.round((world.day + dt) * 1e9) / 1e9;
   cacheFor(world);
   stepAnimals(world, dt);
   for (const effect of world.effects) effect.age += dt;
@@ -531,10 +550,10 @@ function dailyPopulation(world) {
   for (const agent of world.agents) {
     const settlement = settlementOf(world, agent);
     const hungerPenalty = agent.hunger > 65 ? 1.1 : agent.hunger > 45 ? 0.3 : -0.28;
-    const targetMorale = clamp(70 - hungerPenalty * 20 + (agent.homeId ? 8 : -5) + agent.social * 0.08 - agent.sickness * 0.3 - (settlement?.famineDays > 3 ? 15 : 0), 5, 96);
+    const targetMorale = clamp(70 - hungerPenalty * 20 + (agent.homeId ? 8 : -5) + agent.social * 0.08 - agent.sickness * 0.3 - (settlement?.famineDays > 3 ? 15 : 0) + (settlement && hasBuilding(world, settlement, 'shrine') ? 4 : 0), 5, 96);
     agent.morale = clamp(agent.morale + (targetMorale - agent.morale) * 0.055, 0, 100);
     agent.immunity = Math.max(0, agent.immunity - 0.08);
-    if (world.season === 'winter' && !agent.homeId) {
+    if (world.season === 'winter' && !agent.homeId && !(settlement && distance(agent, settlement) < 3)) {
       agent.exposure = Math.min(100, agent.exposure + 1.1);
       if (agent.exposure > 45) { agent.health -= 0.3 * (1 - agent.traits.resilience); agent.energy = Math.max(0, agent.energy - 1); }
     } else agent.exposure = Math.max(0, agent.exposure - 3);
@@ -626,6 +645,7 @@ function foundSettlement(world, candidates, tile) {
   const campCost = BUILDING_COSTS.campfire;
   if (canPay(settlement.stockpile, campCost)) pay(settlement.stockpile, campCost);
   world.buildings.push({ id: world.nextId++, type: 'campfire', x: tile.x, y: tile.y, level: 1, progress: 1, health: 100, settlementId: settlement.id, occupants: [], createdDay: world.day });
+  settlement.stockpile.wood += tile.trees * 0.7; tile.trees = 0;
   addEvent(world, 'founding', `${settlement.name} kuruldu`, `${candidates.length} insan yiyecek, odun ve emeğini birleştirerek ortak bir ocak kurdu. Yakınlık ve üretim fazlası kalıcı yerleşime dönüştü.`, { x: tile.x, y: tile.y, settlementId: settlement.id });
   return settlement;
 }
@@ -719,7 +739,8 @@ function dailySettlements(world) {
     }
     let stage = 'camp';
     const completed = buildingsOf(world, settlement, true);
-    const specialized = new Set(residents.filter(agent => agent.workCount > 5).map(agent => agent.role)).size;
+    // A smith helping with the harvest does not erase metallurgy from a civilization.
+    const specialized = ROLES.filter(role => residents.some(agent => (agent.skills[role] ?? 0) >= 2)).length;
     if (residents.length >= 10 && housing >= 8 && completed.length >= 3) stage = 'hamlet';
     if (residents.length >= 18 && housing >= 15 && hasBuilding(world, settlement, 'granary') && world.farms.filter(farm => farm.settlementId === settlement.id).length >= 2 && specialized >= 4) stage = 'village';
     if (residents.length >= 32 && housing >= 30 && hasBuilding(world, settlement, 'market') && hasBuilding(world, settlement, 'workshop') && settlement.knowledge.civics >= 65 && specialized >= 6) stage = 'town';
@@ -742,7 +763,7 @@ function dailySettlements(world) {
     const tile = getTile(world, building.x, building.y);
     if (tile?.fire > 0) building.health = Math.max(0, building.health - tile.fire * 15);
     if (building.health <= 0 && !building.ruined) {
-      building.ruined = true; building.progress = 0; building.health = 20;
+      building.ruined = true; building.progress = 0; building.health = 20; building.repairCostPaid = false;
       for (const agent of world.agents) if (agent.homeId === building.id) agent.homeId = null;
       building.occupants = [];
       addEvent(world, 'fire', 'Bir yapı zarar gördü', 'Yangın binayı kullanılamaz hale getirdi; yeniden emek harcanması gerekiyor.', { ...building, settlementId: building.settlementId });
@@ -784,7 +805,7 @@ function beginMigration(world, leader, destination, reason) {
       const travelFood = Math.min(3 - agent.inventory.food, oldSettlement.stockpile.food);
       if (travelFood > 0) { oldSettlement.stockpile.food -= travelFood; agent.inventory.food += travelFood; }
     }
-    agent.settlementId = null; agent.homeId = null; agent.destination = { ...destination }; agent.migrationDays = 0;
+    agent.settlementId = null; agent.homeId = null; agent.destination = { ...destination }; agent.migrationDays = 0; agent.pendingAction = null;
     agent.originX = destination.x; agent.originY = destination.y; agent.morale = Math.max(15, agent.morale - 4);
     stopAction(agent);
   }
@@ -871,7 +892,9 @@ function dailyDiplomacy(world) {
 }
 
 function chooseTrade(world, agent, settlement, duration) {
-  if (!settlement) return false;
+  if (!settlement || agent.age < 18 || agent.age >= 58 || agent.health < 65 || agent.energy < 45 || agent.pregnant || world.day < (agent.tradeCooldown ?? 0)) return false;
+  const onMission = world.agents.filter(other => other.settlementId === settlement.id && (other.action.type === 'trade' || other.action.tradeReturn || other.pendingAction?.type === 'trade' || other.pendingAction?.tradeReturn)).length;
+  if (onMission >= Math.max(1, Math.floor(settlement.population / 12))) return false;
   const offers = [];
   for (const other of world.settlements) {
     if (other.id === settlement.id || other.population === 0 || distance(other, settlement) > 45 || other.relations[settlement.id]?.status === 'war' || getTile(world, other.x, other.y)?.region !== getTile(world, agent.x, agent.y)?.region) continue;
@@ -898,7 +921,7 @@ function chooseTrade(world, agent, settlement, duration) {
 
 function finishTrade(world, agent, settlement) {
   const action = agent.action, other = cacheFor(world).settlements.get(action.destinationId);
-  if (!settlement || !other || other.population === 0 || other.relations[settlement.id]?.status === 'war' || !RESOURCES.includes(action.offered) || !RESOURCES.includes(action.wanted)) return false;
+  if (!settlement || !other || other.id === settlement.id || other.population === 0 || other.relations[settlement.id]?.status === 'war' || !RESOURCES.includes(action.offered) || !RESOURCES.includes(action.wanted)) return false;
   const amount = Math.min(action.cargo, agent.inventory[action.offered]);
   const exchange = Math.min(amount * (action.offered === 'tools' ? 2 : action.wanted === 'tools' ? 0.5 : 0.85), other.stockpile[action.wanted]);
   if (amount < 0.5 || exchange < 0.3) return false;
@@ -915,6 +938,7 @@ function finishTrade(world, agent, settlement) {
   }
   addEffect(world, 'spark', agent.x, agent.y, '↔');
   if (a.tradeCount === 1 || a.tradeCount % 8 === 0) addEvent(world, 'trade', `${settlement.name} ↔ ${other.name}`, `${agent.name}, ${Math.round(amount)} ${({ food: 'yiyecek', wood: 'odun', stone: 'taş', ore: 'cevher', tools: 'alet', medicine: 'ilaç' })[action.offered]} karşılığında ${Math.round(exchange)} ${({ food: 'yiyecek', wood: 'odun', stone: 'taş', ore: 'cevher', tools: 'alet', medicine: 'ilaç' })[action.wanted]} takas etti. Bilgi ve güven de yayıldı.`, { x: agent.x, y: agent.y, agentId: agent.id, settlementId: settlement.id });
+  agent.pendingAction = { type: 'walk', targetX: settlement.x + 0.5, targetY: settlement.y + 0.5, duration: 0.2, progress: 0, deposit: true, tradeReturn: true };
   return true;
 }
 
@@ -996,11 +1020,11 @@ export function applyIntervention(world, type, x, y, options = {}) {
     if (Math.hypot(xx - tile.x, yy - tile.y) > radius) continue;
     if (type === 'rain') {
       target.moisture = Math.min(1, target.moisture + 0.35); target.fire = Math.max(0, target.fire - 0.8);
-      if (isWalkable(target)) target.food = Math.min(7, target.food + target.fertility * 0.5);
+      if (isWalkable(target) && target.food < 7) target.food = Math.min(7, target.food + target.fertility * 0.5);
       for (const farm of world.farms) if (farm.x === xx && farm.y === yy) { farm.water = Math.min(1, farm.water + 0.6); farm.health = Math.min(1, farm.health + 0.15); }
       changed++;
     } else if (type === 'food' && isWalkable(target)) { target.food = Math.min(18, target.food + 6); changed++; }
-    else if (type === 'trees' && isWalkable(target) && target.biome !== 'snow' && !world.buildings.some(building => building.x === xx && building.y === yy) && !world.farms.some(farm => farm.x === xx && farm.y === yy)) { target.trees = Math.min(8, target.trees + 3); changed++; }
+    else if (type === 'trees' && isWalkable(target) && target.biome !== 'snow' && !world.buildings.some(building => Math.max(Math.abs(building.x - xx), Math.abs(building.y - yy)) <= 1) && !world.farms.some(farm => farm.x === xx && farm.y === yy)) { target.trees = Math.min(8, target.trees + 3); changed++; }
     else if (type === 'fire' && isWalkable(target) && (target.trees + target.food > 0.2 || world.buildings.some(building => building.x === xx && building.y === yy))) { target.fire = 0.95; changed++; }
   }
   if (type === 'rain') { world.weather = { type: world.season === 'winter' ? 'snow' : 'rain', temperature: clamp(world.weather.temperature - (world.weather.rainfall > 0 ? 0 : 2), -15, 45), rainfall: 0.7, until: world.day + 3 }; }

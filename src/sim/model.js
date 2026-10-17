@@ -60,7 +60,7 @@ export function createAgent(world, options = {}) {
     pregnant: null, birthCooldown: 0, path: [], pathIndex: 0, decisionIn: between(world, 0, 1.5),
     originX: options.x ?? 0, originY: options.y ?? 0, destination: null, migrationDays: 0,
     sickness: 0, immunity: 0, exposure: 0, toolDurability: 0, workCount: 0, kills: 0,
-    social: between(world, 35, 80), lastMeal: world.day, lastDamageCause: '', lastHomeVisit: world.day,
+    social: between(world, 35, 80), lastMeal: world.day, lastDamageCause: '', lastHomeVisit: world.day, pendingAction: null, tradeCooldown: 0,
   };
 }
 
@@ -74,7 +74,7 @@ export function newSettlementName(world) {
 }
 
 export function addEvent(world, type, title, description, at = {}) {
-  world.events.push({ id: world.nextId++, day: world.day, type, title, description, x: at.x ?? null, y: at.y ?? null, agentId: at.agentId ?? at.id ?? null, settlementId: at.settlementId ?? null });
+  world.events.push({ id: world.nextId++, day: world.day, type, title, description, x: at.x ?? null, y: at.y ?? null, agentId: at.agentId ?? null, settlementId: at.settlementId ?? null });
   if (world.events.length > 180) world.events.splice(0, world.events.length - 180);
 }
 
