@@ -19,7 +19,8 @@ let overlay = 'natural';
 let tool = 'inspect';
 let follow = false;
 let fps = 60;
-let lastSaved = null;
+let lastSaved = storedTime(SAVE_KEY);
+let lastAutosaved = storedTime(AUTOSAVE_KEY);
 let soundEnabled = false;
 let accumulator = 0;
 let lastFrame = 0;
@@ -32,6 +33,13 @@ let loadNote = '';
 let running = true;
 const audio = new WorldAudio();
 
+function storedTime(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw && raw.length <= MAX_SAVE_BYTES ? JSON.parse(raw).savedAt || null : null;
+  } catch { return null; }
+}
+
 // A copied seed link always starts that seed. Normal reloads recover the last autosave.
 if (!requestedSeed) {
   try {
@@ -41,7 +49,7 @@ if (!requestedSeed) {
       world = restoreWorld(saved.world);
       speed = SPEEDS.includes(saved.view?.speed) ? saved.view.speed : 1;
       overlay = ['natural', 'territory', 'fertility', 'resources', 'danger'].includes(saved.view?.overlay) ? saved.view.overlay : 'natural';
-      lastSaved = saved.savedAt;
+      lastAutosaved = saved.savedAt;
       paused = true;
       loadNote = 'Dünyan son otomatik kayıttan döndü. Devam etmek için oynat.';
     }
@@ -85,7 +93,7 @@ function selectedItem(selection = selected) {
 }
 
 function snapshot() {
-  return { world, stats: getStats(world), speed, paused, selected, overlay, tool, follow, fps, lastSaved, saving: false, soundEnabled };
+  return { world, stats: getStats(world), speed, paused, selected, overlay, tool, follow, fps, lastSaved, lastAutosaved, saving: false, soundEnabled };
 }
 
 function focus(selection) {
@@ -96,9 +104,26 @@ function focus(selection) {
 function frameHabitat() {
   // Open close enough to read people, while the atlas retains the whole world.
   const town = [...world.settlements].sort((a, b) => b.population - a.population)[0];
-  const family = world.agents.slice(0, Math.min(18, world.agents.length));
-  if (town?.population) renderer.focus(town.x + 0.5, town.y + 0.5, 1.65);
-  else if (family.length) renderer.focus(family.reduce((sum, person) => sum + person.x, 0) / family.length, family.reduce((sum, person) => sum + person.y, 0) / family.length, 1.65);
+  if (town?.population) { renderer.focus(town.x + 0.5, town.y + 0.5, 1.65); return; }
+  const groups = new Map();
+  for (const person of world.agents) {
+    const key = `${person.originX},${person.originY}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(person);
+  }
+  const habitats = [...groups.values()].map(people => {
+    const x = people.reduce((sum, person) => sum + person.x, 0) / people.length;
+    const y = people.reduce((sum, person) => sum + person.y, 0) / people.length;
+    let obstruction = 0, count = 0;
+    for (let yy = Math.floor(y - 8); yy <= y + 8; yy++) for (let xx = Math.floor(x - 8); xx <= x + 8; xx++) {
+      const tile = getTile(world, xx, yy);
+      if (!tile || Math.hypot(xx - x, yy - y) > 8) continue;
+      obstruction += tile.trees * 0.45 + (['water', 'deepwater'].includes(tile.biome) ? 3 : 0) + (['mountain', 'snow'].includes(tile.biome) ? 2 : 0);
+      count++;
+    }
+    return { x, y, score: obstruction / Math.max(1, count) + 1 / people.length };
+  }).sort((a, b) => a.score - b.score);
+  if (habitats.length) renderer.focus(habitats[0].x, habitats[0].y, 1.65);
 }
 
 function updateMapStatus(point) {
@@ -139,7 +164,9 @@ function replaceWorld(next, view = {}) {
 
 function save(auto = false) {
   try {
-    lastSaved = writeSave(localStorage, world, { speed, overlay }, auto);
+    const savedAt = writeSave(localStorage, world, { speed, overlay }, auto);
+    if (auto) lastAutosaved = savedAt;
+    else lastSaved = savedAt;
     autosaveFailed = false;
     if (!auto) ui.toast('Dünya kaydedildi. Aynı rastgelelik durumu ve bütün aileler korunuyor.', 'success');
     updateUI();
@@ -149,6 +176,19 @@ function save(auto = false) {
     autosaveFailed = true;
     return false;
   }
+}
+
+function loadWorld(auto = false) {
+  try {
+    const saved = readSave(localStorage, auto);
+    const next = restoreWorld(saved.world);
+    paused = true;
+    replaceWorld(next, saved.view);
+    if (auto) lastAutosaved = saved.savedAt;
+    else lastSaved = saved.savedAt;
+    updateUI();
+    ui.toast(auto ? 'Otomatik kayıt yüklendi ve duraklatıldı.' : 'Kayıtlı dünya yüklendi ve duraklatıldı.', 'success');
+  } catch (error) { ui.toast(error.message, 'error'); }
 }
 
 const actions = {
@@ -165,24 +205,14 @@ const actions = {
       const next = createWorld({ ...DEFAULTS, ...options, seed: String(options.seed || `Vadi-${Date.now().toString(36)}`).slice(0, 100) });
       replaceWorld(next);
       paused = false;
-      lastSaved = null;
       // Do not silently erase the manual save slot when creating another world.
       save(true);
       ui.toast('Yeni dünya doğdu. Bundan sonrası içindeki insanların hikâyesi.', 'success');
     } catch (error) { ui.toast(`Dünya oluşturulamadı: ${error.message}`, 'error'); }
   },
   save() { save(false); },
-  load() {
-    try {
-      const saved = readSave(localStorage, !localStorage.getItem(SAVE_KEY));
-      const next = restoreWorld(saved.world);
-      replaceWorld(next, saved.view);
-      paused = true;
-      lastSaved = saved.savedAt;
-      updateUI();
-      ui.toast('Dünya yüklendi ve duraklatıldı.', 'success');
-    } catch (error) { ui.toast(error.message, 'error'); }
-  },
+  load() { loadWorld(false); },
+  loadAutosave() { loadWorld(true); },
   exportSave() {
     try {
       const safeSeed = world.seed.replace(/[^a-z0-9ığüşöçİĞÜŞÖÇ_-]/gi, '-').slice(0, 50);
@@ -198,7 +228,6 @@ const actions = {
       const next = restoreWorld(saved.world);
       replaceWorld(next, saved.view);
       paused = true;
-      lastSaved = saved.savedAt;
       save(true);
       updateUI();
       ui.toast('Dünya dosyası doğrulandı ve yüklendi.', 'success');
