@@ -8,7 +8,7 @@ const fail = message => { throw new Error(`Geçersiz dünya kaydı: ${message}`)
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const finite = (value, min, max) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 const count = (value, min, max) => Number.isInteger(value) && value >= min && value <= max;
-const id = value => (typeof value === 'string' && value.length > 0 && value.length <= 120) || count(value, 0, 1e9);
+const id = value => count(value, 1, 1e10);
 const RESOURCES = ['food', 'wood', 'stone', 'ore', 'tools', 'medicine'];
 const ROLES = ['gatherer', 'farmer', 'lumberjack', 'miner', 'fisher', 'hunter', 'builder', 'smith', 'healer', 'trader', 'warrior', 'scholar'];
 const KNOWLEDGE = ['agriculture', 'masonry', 'metallurgy', 'medicine', 'trade', 'civics'];
@@ -92,6 +92,38 @@ export function validateWorld(world) {
   for (const animal of world.animals) {
     if (!object(animal) || !id(animal.id) || !point(animal) || !['deer', 'boar', 'wolf'].includes(animal.species) || !numbers(animal, ['health', 'age', 'hunger'], -100, 1e6) || !finite(animal.decisionIn, -10, 10000) || !point({ x: animal.targetX, y: animal.targetY })) fail('yaban hayatı kaydı hatalı.');
   }
+  for (const effect of world.effects) {
+    if (!object(effect) || !id(effect.id) || !point(effect) || typeof effect.type !== 'string' || typeof effect.text !== 'string' || !finite(effect.age, 0, 1000) || !finite(effect.duration, 0.01, 1000)) fail('görsel etki kaydı hatalı.');
+  }
+  for (const event of world.events) {
+    if (!object(event) || !id(event.id) || !finite(event.day, 0, world.day) || typeof event.type !== 'string' || typeof event.title !== 'string' || typeof event.description !== 'string') fail('olay kaydı hatalı.');
+    if ((event.x != null || event.y != null) && !point(event)) fail('olay konumu hatalı.');
+  }
+  for (const sample of world.history) {
+    if (!object(sample) || !finite(sample.day, 0, world.day) || !count(sample.population, 0, 2000) || !numbers(sample, ['births', 'deaths', 'food', 'wars'])) fail('tarih örneği hatalı.');
+  }
+  for (const grave of world.graves) {
+    if (!object(grave) || !id(grave.id) || !point(grave) || typeof grave.name !== 'string' || typeof grave.cause !== 'string' || !finite(grave.age, 0, 200) || !finite(grave.day, 0, world.day) || !count(grave.level, 1, 20)) fail('yaşam anısı hatalı.');
+  }
+  // IDs share one sequence. Historical family references may outlive their people.
+  // Graves carry the deceased person's ID, so they are references, not new entities.
+  const entityIds = new Set();
+  let highestId = 0;
+  const reference = value => {
+    if (value == null) return;
+    if (!id(value)) fail('nesne bağlantısı hatalı.');
+    highestId = Math.max(highestId, value);
+  };
+  for (const key of ['agents', 'settlements', 'buildings', 'farms', 'animals', 'events', 'effects']) for (const item of world[key]) {
+    reference(item.id);
+    if (entityIds.has(item.id)) fail('yinelenen nesne kimliği.');
+    entityIds.add(item.id);
+    for (const field of ['settlementId', 'homeId', 'partnerId', 'leaderId', 'agentId']) reference(item[field]);
+    for (const field of ['parents', 'childrenIds', 'occupants']) for (const value of item[field] || []) reference(value);
+    if (item.pregnant) reference(item.pregnant.fatherId);
+  }
+  for (const grave of world.graves) { reference(grave.id); reference(grave.settlementId); }
+  if (world.nextId <= highestId) fail('kimlik sayacı mevcut kayıtların gerisinde.');
   return world;
 }
 

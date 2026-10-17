@@ -42,6 +42,13 @@ test('save validation rejects corrupted worlds before any replacement', () => {
     world => { world.agents[0].traits.courage = 'unbounded'; },
     world => { world.agents[0].inventory.tools = -5; },
     world => { world.agents[0].pendingAction = { type: 'teleport' }; },
+    world => { world.effects = [null]; },
+    world => { world.events.push(null); },
+    world => { world.history = [null]; },
+    world => { world.graves = [null]; },
+    world => { world.nextId = world.agents[0].id; },
+    world => { world.agents[0].childrenIds.push(world.nextId + 10); },
+    world => { world.animals[0].id = world.agents[0].id; },
     world => { world.events = 'broken'; },
   ];
   for (const corrupt of cases) {
