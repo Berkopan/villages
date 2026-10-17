@@ -521,6 +521,7 @@ export function setLanguage(next) {
 // Pattern translations cover generated numbers, character names and saved chronicle entries.
 // Match complete phrases only: player-defined names and seed values remain untouched.
 const patterns = [
+  [/^Yıl ([\d.,]+) · (.+) · ([\d.,]+)\. gün$/, m => 'Year ' + m[1] + ' · ' + english(m[2]) + ' · Day ' + m[3]],
   [/^Yıl ([\d.,]+) · (.+)$/, m => 'Year ' + m[1] + ' · ' + english(m[2])],
   [/^([\d.,]+)\. gün$/, m => 'Day ' + m[1]],
   [/^([\d.,]+) kişi$/, m => m[1] + ' people'],
