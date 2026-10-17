@@ -74,6 +74,8 @@ export class WorldRenderer {
     this.dpr = 1;
     this.camera = { x: 44, y: 32, zoom: 1 };
     this.ground = null;
+    this.overview = null;
+    this.overviewDirty = true;
     this.groundSeason = null;
     this.groundDay = -100;
     this.groundTime = -100;
@@ -102,6 +104,8 @@ export class WorldRenderer {
     this.world = world;
     this.seed = hashValue(world.seed);
     this.ground = null;
+    this.overview = null;
+    this.overviewDirty = true;
     this.groundSeason = null;
     this.groundDay = -100;
     this.groundTime = -100;
@@ -349,6 +353,48 @@ export class WorldRenderer {
     }
     this.groundSeason = season;
     this.groundDay = world.day;
+    this.overviewDirty = true;
+  }
+
+  environmentObjects(world, bounds, season, occupied = null, clearings = null) {
+    const objects = [];
+    for (let y = bounds.y0; y <= bounds.y1; y++) for (let x = bounds.x0; x <= bounds.x1; x++) {
+      const tile = world.tiles[y * world.width + x];
+      if (!tile) continue;
+      const seed = hashValue(`${this.seed}:${x}:${y}`), variant = seed % 6;
+      const px = x + 0.3 + noise(seed, 1) * 0.4, py = y + 0.4 + noise(seed, 2) * 0.4;
+      if (tile.trees > 0.4) {
+        const kind = tile.biome === 'snow' || tile.elevation > 0.69 ? 0 : ((seed >>> 5) % 4);
+        const opacity = clearings?.has(`${x}:${y}`) ? 0.3 : occupied?.has(`${x}:${y}`) ? 0.62 : 1;
+        objects.push({ type: 'tree', x: px, y: py, kind, variant, opacity });
+        if (tile.trees > 6 && seed % 3 === 0) objects.push({ type: 'tree', x: px + 0.45, y: py + 0.35, kind, variant: (variant + 2) % 6, small: true, opacity });
+      } else if (tile.burn > 0.35 && seed % 3 === 0) objects.push({ type: 'prop', x: px, y: py, prop: 'stump', variant });
+      else if (tile.stone > 1.5 && (seed % 3 !== 0 || tile.biome === 'mountain')) objects.push({ type: 'prop', x: px, y: py, prop: tile.biome === 'mountain' ? 'mountain' : tile.ore > 2 ? 'ore' : 'rock', variant });
+      else if (tile.food > 2.7 && seed % 5 === 0) objects.push({ type: 'prop', x: px, y: py, prop: 'bush', variant });
+      else if (tile.biome === 'grass' && tile.moisture > 0.35 && seed % 17 === 0 && season !== 'winter') objects.push({ type: 'prop', x: px, y: py, prop: 'flowers', variant });
+      else if (tile.biome === 'sand' && seed % 9 === 0) objects.push({ type: 'prop', x: px, y: py, prop: 'reeds', variant });
+      else if (tile.biome === 'water' && tile.fish > 8 && seed % 29 === 0) objects.push({ type: 'prop', x: px, y: py, prop: 'lily', variant });
+    }
+    return objects;
+  }
+
+  overviewLayer(world, season) {
+    if (!this.overview || this.overview.width !== world.width * TILE_SIZE + 96 || this.overview.height !== world.height * TILE_SIZE + 96) {
+      this.overview = makeLayer(world.width * TILE_SIZE + 96, world.height * TILE_SIZE + 96);
+      this.overviewDirty = true;
+    }
+    if (this.overviewDirty) {
+      const ctx = this.overview.getContext('2d');
+      ctx.clearRect(0, 0, this.overview.width, this.overview.height);
+      const objects = this.environmentObjects(world, { x0: 0, y0: 0, x1: world.width - 1, y1: world.height - 1 }, season);
+      objects.sort((a, b) => a.y - b.y);
+      for (const object of objects) {
+        const sprite = object.type === 'tree' ? getTreeSprite(object.kind, object.variant, season, object.small) : getPropSprite(object.prop, object.variant, season);
+        drawSprite(ctx, sprite, object.x * TILE_SIZE + 48, object.y * TILE_SIZE + 48);
+      }
+      this.overviewDirty = false;
+    }
+    return this.overview;
   }
 
   updatePositions(world) {
@@ -408,6 +454,10 @@ export class WorldRenderer {
     const inBounds = object => object.x >= bounds.x0 - 2 && object.x <= bounds.x1 + 2 && object.y >= bounds.y0 - 2 && object.y <= bounds.y1 + 3;
     this.drawWater(ctx, world, bounds, time);
     if (this.view.overlay && this.view.overlay !== 'natural') this.drawOverlay(ctx, world, bounds, this.view.overlay);
+    const overview = zoom < 1;
+    // At map scale silhouettes are easier to read above the canopy; hundreds of
+    // immutable trees share one cached image instead of thousands of draw calls.
+    if (overview) ctx.drawImage(this.overviewLayer(world, season), -48, -48);
     for (const farm of world.farms || []) if (inBounds(farm)) drawSprite(ctx, getFarmSprite(farm, season), (farm.x + 0.5) * TILE_SIZE, (farm.y + 0.5) * TILE_SIZE);
     const objects = [], occupied = new Set();
     const visibleAgents = world.agents.filter(agent => agent.alive !== false && inBounds(agent));
@@ -420,23 +470,19 @@ export class WorldRenderer {
       for (let oy = 0; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) occupied.add(`${Math.floor(x) + ox}:${Math.floor(y) + oy}`);
     }
     const settlementColors = new Map((world.settlements || []).map(settlement => [settlement.id, settlement.color || '#c4aa6a']));
+    if (!overview) {
+      const clearings = new Set();
+      for (const building of world.buildings || []) if (inBounds(building)) {
+        for (let dy = -1; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++) clearings.add(`${Math.floor(building.x) + dx}:${Math.floor(building.y) + dy}`);
+      }
+      for (const farm of world.farms || []) if (inBounds(farm)) {
+        for (let dy = 0; dy <= 1; dy++) clearings.add(`${Math.floor(farm.x)}:${Math.floor(farm.y) + dy}`);
+      }
+      objects.push(...this.environmentObjects(world, bounds, season, occupied, clearings));
+    }
     for (let y = bounds.y0; y <= bounds.y1; y++) for (let x = bounds.x0; x <= bounds.x1; x++) {
       const tile = world.tiles[y * world.width + x];
-      if (!tile) continue;
-      const seed = hashValue(`${this.seed}:${x}:${y}`), variant = seed % 6;
-      const px = x + 0.3 + noise(seed, 1) * 0.4, py = y + 0.4 + noise(seed, 2) * 0.4;
-      if (tile.trees > 0.4) {
-        const kind = tile.biome === 'snow' || tile.elevation > 0.69 ? 0 : ((seed >>> 5) % 4);
-        objects.push({ type: 'tree', x: px, y: py, tile, kind, variant, transparent: occupied.has(`${x}:${y}`) });
-        if (tile.trees > 6 && seed % 3 === 0) objects.push({ type: 'tree', x: px + 0.45, y: py + 0.35, tile, kind, variant: (variant + 2) % 6, small: true, transparent: occupied.has(`${x}:${y}`) });
-      } else if (tile.burn > 0.35 && seed % 3 === 0) objects.push({ type: 'prop', x: px, y: py, prop: 'stump', variant });
-      else if (tile.stone > 1.5 && (seed % 3 !== 0 || tile.biome === 'mountain')) {
-        objects.push({ type: 'prop', x: px, y: py, prop: tile.biome === 'mountain' ? 'mountain' : tile.ore > 2 ? 'ore' : 'rock', variant });
-      } else if (tile.food > 2.7 && seed % 5 === 0) objects.push({ type: 'prop', x: px, y: py, prop: 'bush', variant });
-      else if (tile.biome === 'grass' && tile.moisture > 0.35 && seed % 17 === 0 && season !== 'winter') objects.push({ type: 'prop', x: px, y: py, prop: 'flowers', variant });
-      else if (tile.biome === 'sand' && seed % 9 === 0) objects.push({ type: 'prop', x: px, y: py, prop: 'reeds', variant });
-      else if (tile.biome === 'water' && tile.fish > 8 && seed % 29 === 0) objects.push({ type: 'prop', x: px, y: py, prop: 'lily', variant });
-      if (tile.fire > 0.01) objects.push({ type: 'fire', x: x + 0.5, y: y + 0.5, data: tile });
+      if (tile?.fire > 0.01) objects.push({ type: 'fire', x: x + 0.5, y: y + 0.5, data: tile });
     }
     for (const building of world.buildings || []) if (inBounds(building)) objects.push({ type: 'building', x: building.x + 0.5, y: building.y + 0.5, data: building });
     for (const animal of world.animals || []) if (inBounds(animal)) objects.push({ type: 'animal', x: animal.x, y: animal.y, data: animal });
@@ -450,7 +496,7 @@ export class WorldRenderer {
     for (const object of objects) {
       const x = object.x * TILE_SIZE, y = object.y * TILE_SIZE;
       if (object.type === 'tree') {
-        ctx.globalAlpha = object.transparent ? 0.62 : 1;
+        ctx.globalAlpha = object.opacity ?? 1;
         drawSprite(ctx, getTreeSprite(object.kind, object.variant, season, object.small), x, y);
         ctx.globalAlpha = 1;
       } else if (object.type === 'prop') drawSprite(ctx, getPropSprite(object.prop, object.variant, season), x, y);
