@@ -26,6 +26,7 @@ let lastFrame = 0;
 let lastUI = 0;
 let lastAutosave = performance.now();
 let lastPaint = 0;
+let lastToolNotice = 0;
 let autosaveFailed = false;
 let loadNote = '';
 let running = true;
@@ -57,7 +58,11 @@ const renderer = new WorldRenderer(canvas, {
   onPaint({ type, x, y }) {
     if (performance.now() - lastPaint < 100) return;
     lastPaint = performance.now();
-    applyIntervention(world, type || tool, x, y);
+    const result = applyIntervention(world, type || tool, x, y);
+    if (result?.ok === false && performance.now() - lastToolNotice > 1500) {
+      ui.toast(result.message || 'Bu konumda etki oluşmadı.', 'info');
+      lastToolNotice = performance.now();
+    }
     updateUI();
   },
   onCameraChange(camera) { if (camera?.userInput) follow = false; },
@@ -86,6 +91,14 @@ function snapshot() {
 function focus(selection) {
   const item = selectedItem(selection);
   if (item && Number.isFinite(item.x) && Number.isFinite(item.y)) renderer.focus(item.x, item.y);
+}
+
+function frameHabitat() {
+  // Open close enough to read people, while the atlas retains the whole world.
+  const town = [...world.settlements].sort((a, b) => b.population - a.population)[0];
+  const family = world.agents.slice(0, Math.min(18, world.agents.length));
+  if (town?.population) renderer.focus(town.x + 0.5, town.y + 0.5, 1.65);
+  else if (family.length) renderer.focus(family.reduce((sum, person) => sum + person.x, 0) / family.length, family.reduce((sum, person) => sum + person.y, 0) / family.length, 1.65);
 }
 
 function updateMapStatus(point) {
@@ -120,6 +133,7 @@ function replaceWorld(next, view = {}) {
   speed = SPEEDS.includes(view.speed) ? view.speed : 1;
   renderer.setWorld(world);
   renderer.fitWorld();
+  frameHabitat();
   updateUI();
 }
 
@@ -214,6 +228,7 @@ function updateUI() {
 document.addEventListener('keydown', event => {
   if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
   if (event.target.closest('input, textarea, select, [contenteditable="true"]') || document.querySelector('dialog[open]')) return;
+  if (event.code === 'Space' && event.target.closest('button, summary, a[href], [role="button"]')) return;
   if (event.code === 'Space') { event.preventDefault(); actions.togglePause(); }
   else if (/^[1-5]$/.test(event.key)) actions.setSpeed(SPEEDS[Number(event.key) - 1]);
   else if (event.key === '+' || event.key === '=') actions.zoomIn();
@@ -270,6 +285,7 @@ window.addEventListener('error', event => {
 });
 renderer.resize();
 renderer.fitWorld();
+frameHabitat();
 updateUI();
 if (loadNote) ui.toast(loadNote, 'info');
 requestAnimationFrame(frame);
