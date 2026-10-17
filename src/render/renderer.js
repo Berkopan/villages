@@ -1,7 +1,7 @@
 import {
   TILE_SIZE, PALETTE, hashValue, noise, normalizeSeason, getTerrainSprite,
   getTreeSprite, getPropSprite, getBuildingSprite, getFarmSprite,
-  getAgentSprite, getAnimalSprite, getLifeStage, drawSprite,
+  getAgentSprite, getAnimalSprite, getLifeStage, drawSprite, recoverTerrainSprites,
 } from './sprites.js';
 
 const WATER = new Set(['water', 'deepwater']);
@@ -304,9 +304,14 @@ export class WorldRenderer {
   }
 
   buildGround(world, season) {
+    // An aging world may exhaust canvas backing stores as character animation
+    // variants accumulate. Discard invalid terrain sprites BEFORE rebuilding,
+    // otherwise drawImage silently copies transparent pixels to the map.
+    recoverTerrainSprites(season);
     const width = world.width * TILE_SIZE, height = world.height * TILE_SIZE;
     if (!this.ground || this.ground.width !== width || this.ground.height !== height) this.ground = makeLayer(width, height);
     const ctx = this.ground.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
     const at = (x, y) => x >= 0 && y >= 0 && x < world.width && y < world.height ? world.tiles[y * world.width + x] : null;
     for (const tile of world.tiles) {
       const seed = hashValue(`${this.seed}:${tile.x}:${tile.y}`);
