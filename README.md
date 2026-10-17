@@ -8,6 +8,8 @@
 
 *Gerçek simülasyondan bir an: `Söğüt Vadisi`, 480. gün. Önizleme için binalar veya karakterler elle yerleştirilmedi.*
 
+[Çalışan oyun arayüzünü ve Korudere gözlem defterini görüntüle.](assets/interface-1792233917993.jpg)
+
 ## Dünyada neler oluyor?
 
 - **Birbirinden farklı insanlar:** İsimler, aile bağları, yedi kalıtsal eğilim, kişisel envanter, sağlık, açlık, enerji, sosyal ihtiyaç ve moral. Çocukların görünüşleri ve eğilimleri ebeveynlerinden izler taşır.
