@@ -25,6 +25,12 @@ export function dailyEcosystem(world) {
   const rain = world.weather.rainfall;
   const drought = world.weather.type === 'drought';
   const newFires = [];
+  const occupied = new Set();
+  for (const building of world.buildings) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const tile = getTile(world, building.x + dx, building.y + dy);
+    if (tile) occupied.add(tile.y * world.width + tile.x);
+  }
+  for (const farm of world.farms) occupied.add(farm.y * world.width + farm.x);
   for (const tile of world.tiles) {
     tile.moisture = clamp(tile.moisture + rain * 0.018 - (drought ? 0.012 : world.season === 'summer' ? 0.0025 : 0.0005), 0.06, 1);
     tile.road = Math.max(0, tile.road - 0.0005);
@@ -47,9 +53,12 @@ export function dailyEcosystem(world) {
     }
     const waterFactor = clamp(tile.moisture * 1.8, 0.08, 1.3) * (drought ? 0.35 : 1);
     const maxFood = tile.fertility * (tile.biome === 'forest' ? 4.2 : tile.biome === 'grass' ? 5.2 : 1.2);
-    tile.food = Math.min(maxFood, tile.food + tile.fertility * 0.075 * growth * waterFactor);
-    if (tile.biome === 'forest') tile.trees = Math.min(8, tile.trees + 0.018 * growth * waterFactor);
-    else if (tile.biome === 'grass' && tile.trees > 0.15) tile.trees = Math.min(3, tile.trees + 0.006 * growth * waterFactor);
+    if (tile.food < maxFood) tile.food = Math.min(maxFood, tile.food + tile.fertility * 0.075 * growth * waterFactor);
+    else tile.food = Math.max(maxFood, tile.food * 0.998);
+    if (!occupied.has(tile.y * world.width + tile.x)) {
+      if (tile.biome === 'forest' && tile.trees < 8) tile.trees = Math.min(8, tile.trees + 0.018 * growth * waterFactor);
+      else if (tile.biome === 'grass' && tile.trees > 0.15 && tile.trees < 3) tile.trees = Math.min(3, tile.trees + 0.006 * growth * waterFactor);
+    }
     tile.herbs = Math.min(3, (tile.herbs ?? 0) + tile.moisture * 0.015 * growth);
     if (drought && tile.trees > 5 && tile.moisture < 0.25 && chance(world, 0.000008)) {
       tile.fire = 0.8;
@@ -95,6 +104,15 @@ export function stepAnimals(world, dt) {
       let target = null;
       const humans = world.agents.filter(agent => distance(animal, agent) < 4);
       if (animal.species === 'wolf' && animal.hunger > 25) {
+        const prey = world.animals.filter(other => other.id !== animal.id && other.species !== 'wolf' && other.health > 0 && distance(animal, other) < 6).sort((a, b) => distance(a, animal) - distance(b, animal))[0];
+        if (prey) {
+          animal.targetX = prey.x; animal.targetY = prey.y;
+          if (distance(animal, prey) < 1.2) {
+            prey.health -= between(world, 4, 8);
+            if (prey.health <= 0) { animal.hunger = Math.max(0, animal.hunger - 45); animal.health = Math.min(24, animal.health + 3); }
+          }
+          continue;
+        }
         const vulnerable = humans.find(agent => (agent.health < 50 || agent.age < 10) && !humans.some(other => other.age >= 18 && distance(agent, other) < 2));
         if (vulnerable) {
           animal.targetX = vulnerable.x; animal.targetY = vulnerable.y;
