@@ -42,7 +42,7 @@
   <p class="note">Aynı kişinin teni ve kimliği korunur. Boy, baş–beden oranı, saç ve duruş değişir.</p>
   <div class="grid" id="ages"></div>
   <h2>Deneyim görünür iz bırakır</h2>
-  <p class="note">Kuşak, çapraz askı ve çanta, pelerin, sonra altın omuzluklar. Ustalık yalnızca bir sayı değildir.</p>
+  <p class="note">Her seviyede farklı kuşak işlemesi; dönüm noktalarında çanta, pelerin ve altın omuzluklar. Bronz, gümüş, altın ve fildişi iplikle işlenen beşer basamak.</p>
   <div class="grid" id="levels"></div>
   <h2>Birbirine benzemeyen komşular</h2>
   <p class="note">8 ten tonu · 10 saç tonu · 10 saç biçimi · 12 kıyafet paleti · 8 vurgu rengi · 16 beden/giyim varyantı · farklı başlık ve sakallar.</p>
@@ -71,7 +71,7 @@
     }
     const person=(agent)=>(ctx,size,t)=>drawSprite(ctx,getAgentSprite(agent,t),size/2,size-13,3);
     for(const [age,label] of [[1,'Bebek'],[7,'Çocuk'],[15,'Genç'],[28,'Yetişkin'],[71,'Yaşlı']])card('ages',label,`${age} yaş`,person({...base,age}));
-    for(const level of [1,2,4,7,10])card('levels',`Seviye ${level}`,['','Çırak','Kuşaklı','','Usta','','','Deneyimli','','','Saygın'][level],person({...base,level}));
+    for(let level=1;level<=20;level++)card('levels',`Seviye ${level}`,({1:'Çırak',2:'Kuşaklı',4:'Çantalı',7:'Pelerinli',10:'Altın omuzluk'})[level]||'Yeni kuşak işlemesi',person({...base,level}));
     for(let i=0;i<36;i++){
       const agent={...base,id:i+20,sex:i%2?'female':'male',age:[23,35,19,63,47,29][i%6],level:1+i%5,direction:[2,1,3][i%3],appearance:{skin:i%8,hair:(i*3)%10,hairStyle:i%10,outfit:(i*5)%12,accent:i%8,variant:i%16,beard:i%4,hat:(i*3)%5}};
       card('people',`Komşu ${String(i+1).padStart(2,'0')}`,`${agent.age} yaş · Sv. ${agent.level}`,person(agent));
@@ -79,8 +79,8 @@
     const jobs=[['walk','gatherer','Yürüme'],['gather','gatherer','Toplama'],['farm','farmer','Tarım'],['chop','lumberjack','Odunculuk'],['mine','miner','Madencilik'],['fish','fisher','Balıkçılık'],['hunt','hunter','Avcılık'],['build','builder','İnşaat'],['craft','smith','Demircilik'],['heal','healer','Şifacılık'],['trade','trader','Ticaret'],['fight','warrior','Savaş'],['migrate','gatherer','Göç'],['flee','gatherer','Kaçış'],['eat','gatherer','Yemek'],['rest','gatherer','Dinlenme'],['study','scholar','Araştırma']];
     jobs.forEach(([action,role,label],i)=>card('actions',label,role,person({...base,id:77+i,sex:i%2?'female':'male',role,level:4,direction:i%3===0?3:2,action:{type:action},appearance:{...base.appearance,outfit:i%12,hairStyle:i%8,hat:i%5,beard:i%4}})));
     const structures=[['campfire','Kamp ateşi'],['hut','Kulübe'],['house','Ev'],['granary','Ambar'],['well','Kuyu'],['lumberyard','Odunhane'],['mine','Maden'],['workshop','Atölye'],['market','Pazar'],['barracks','Kışla'],['watchtower','Gözetleme kulesi'],['hall','Toplantı salonu'],['shrine','Tapınak']];
-    structures.forEach(([type,label],i)=>card('buildings',label,type,(ctx,size)=>drawSprite(ctx,getBuildingSprite({id:i,type,level:2,progress:1},['#a9ad73','#7ca6a1','#ba8570'][i%3],season),size/2,size-14,2),true));
-    for(const progress of [.1,.4,.7])card('buildings',`İnşa %${Math.round(progress*100)}`,'Devam eden yapı',(ctx,size)=>drawSprite(ctx,getBuildingSprite({type:'house',level:1,progress},'#adad75',season),size/2,size-14,2),true);
+    structures.forEach(([type,label],i)=>card('buildings',label,type,(ctx,size)=>drawSprite(ctx,getBuildingSprite({id:i,type,level:2,progress:1},['#a9ad73','#7ca6a1','#ba8570'][i%3],season),size/2,size-10,2),true));
+    for(const progress of [.1,.4,.7])card('buildings',`İnşa %${Math.round(progress*100)}`,'Devam eden yapı',(ctx,size)=>drawSprite(ctx,getBuildingSprite({type:'house',level:1,progress},'#adad75',season),size/2,size-10,2),true);
     for(let i=0;i<4;i++)card('nature',['Çam','Meşe','Huş','Meyve ağacı'][i],'Mevsimsel taç',(ctx,size)=>drawSprite(ctx,getTreeSprite(i,i,season),size/2,size-12,2));
     for(const type of ['rock','ore','bush','flowers','reeds','lily'])card('nature',type,'Çevre ayrıntısı',(ctx,size)=>drawSprite(ctx,getPropSprite(type,2,season),size/2,size-18,3));
     for(const growth of [0,.25,.6,1])card('nature',`Buğday %${growth*100}`,'Büyüyen tarla',(ctx,size)=>drawSprite(ctx,getFarmSprite({growth,ripe:growth===1,water:.7,crop:'wheat'},season),size/2,size-28,3));

@@ -70,6 +70,9 @@ function cached(key, width, height, anchorX, anchorY, paint) {
         if (++removed >= 500) break;
       }
     }
+    // A long-lived world can also accumulate seasons and many culture colors.
+    // Preserve a hard bound even if the oldest entries are all environment art.
+    while (atlas.size > MAX_ATLAS - 200) atlas.delete(atlas.keys().next().value);
   }
   atlas.set(key, sprite);
   return sprite;
@@ -524,7 +527,8 @@ function appearanceOf(agent) {
 export function getAgentSprite(agent, time = 0, options = {}) {
   const a = appearanceOf(agent), stage = getLifeStage(agent), rawDir = normalizeDirection(agent);
   const dir = rawDir === 3 ? 1 : rawDir;
-  const tier = (agent.level || 1) >= 10 ? 4 : (agent.level || 1) >= 7 ? 3 : (agent.level || 1) >= 4 ? 2 : (agent.level || 1) >= 2 ? 1 : 0;
+  const level = Math.min(20, Math.max(1, Math.floor(Number(agent.level) || 1)));
+  const tier = level >= 10 ? 4 : level >= 7 ? 3 : level >= 4 ? 2 : level >= 2 ? 1 : 0;
   let action = typeof agent.action === 'string' ? agent.action : agent.action?.type || 'idle';
   if (options.action) action = options.action;
   const hasMotion = Math.abs(agent.vx || 0) + Math.abs(agent.vy || 0) > 0.025;
@@ -534,7 +538,7 @@ export function getAgentSprite(agent, time = 0, options = {}) {
   const phase = options.still ? 0 : animated ? Math.floor(time * (action === 'flee' || action === 'fight' ? 9 : 6) + (a.seed % 7)) % 4 : Math.floor(time * 1.2 + (a.seed % 3)) % 2;
   const role = agent.role || 'gatherer';
   const isMale = !['female', 'f', 'woman', 'kadın'].includes(String(agent.sex).toLowerCase());
-  const key = `person:${a.skin}:${a.hair}:${a.shirt}:${a.accent}:${a.hairStyle}:${a.body}:${a.beard}:${a.hat}:${isMale}:${stage}:${tier}:${role}:${action}:${rawDir}:${phase}:${moving}`;
+  const key = `person:${a.skin}:${a.hair}:${a.shirt}:${a.accent}:${a.hairStyle}:${a.body}:${a.beard}:${a.hat}:${isMale}:${stage}:${level}:${role}:${action}:${rawDir}:${phase}:${moving}`;
   return cached(key, 34, 38, 17, 34, ctx => {
     if (rawDir === 3) { ctx.translate(34, 0); ctx.scale(-1, 1); }
     const child = stage === 'child', baby = stage === 'baby', teen = stage === 'teen', elder = stage === 'elder';
@@ -685,6 +689,11 @@ export function getAgentSprite(agent, time = 0, options = {}) {
     } else if (elder && !resting) {
       pixelLine(ctx, '#a08559', handX + 1, handY, handX + 2, 34, 1);
     }
+    // Each of the twenty levels has its own hem embroidery, even between the
+    // larger equipment milestones. Five stitches progress bronze→silver→gold→ivory.
+    const thread = ['#c59762', '#c6d3bf', '#ebc872', '#efe1bf'][Math.floor((level - 1) / 5)];
+    const stitches = (level - 1) % 5 + 1;
+    for (let stitch = 0; stitch < 5; stitch++) rect(ctx, stitch < stitches ? thread : shirtDark, cx - 2 + stitch, torsoY + torsoH - 1, 1, 1);
   });
 }
 
@@ -743,7 +752,7 @@ export function drawPortrait(ctx, agent, size = 64, time = 0) {
   rect(ctx, '#63866345', size * 0.17, size * 0.81, size * 0.66, 4);
   rect(ctx, '#63866325', size * 0.27, size * 0.87, size * 0.46, 2);
   const scale = Math.max(1, Math.floor(size / 32));
-  const sprite = getAgentSprite(agent, time, { action: 'idle', still: true });
+  const sprite = getAgentSprite({ ...agent, direction: 2 }, time, { action: 'idle', still: true });
   drawSprite(ctx, sprite, size / 2, Math.floor(size * 0.88), scale);
   ctx.restore();
 }
