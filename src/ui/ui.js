@@ -8,7 +8,7 @@ const ROLE = {
   baby: 'Bebek', child: 'Çocuk', wanderer: 'Gezgin',
 };
 const LIFE_STAGE = { baby: 'Bebek', child: 'Çocuk', teen: 'Genç', adult: 'Yetişkin', elder: 'Yaşlı' };
-const STAGE = { camp: 'Kamp', hamlet: 'Mezra', village: 'Köy', town: 'Kasaba', city: 'Şehir' };
+const STAGE = { camp: 'Oba', hamlet: 'Mezra', village: 'Köy', town: 'Kasaba', city: 'Kent' };
 const SEASON = { spring: ['İlkbahar', 'sprout'], summer: ['Yaz', 'sun'], autumn: ['Sonbahar', 'leaf'], winter: ['Kış', 'snow'] };
 const WEATHER = { clear: ['Açık', 'sun'], rain: ['Yağmurlu', 'rain'], storm: ['Fırtına', 'storm'], drought: ['Kuraklık', 'sun'], snow: ['Kar yağışı', 'snow'] };
 const RESOURCE = { food: ['Yiyecek', 'wheat'], wood: ['Odun', 'tree'], stone: ['Taş', 'stone'], ore: ['Cevher', 'ore'], tools: ['Alet', 'tools'], medicine: ['İlaç', 'medicine'] };
@@ -45,9 +45,9 @@ const BIOME = {
   mountain: ['Dağ', 'mountain'], snow: ['Karlı zirve', 'snow'],
 };
 const BUILDING = {
-  campfire: 'Kamp ateşi', hut: 'Kulübe', house: 'Ev', granary: 'Ambar', well: 'Kuyu',
-  lumberyard: 'Odun deposu', mine: 'Maden', workshop: 'Atölye', market: 'Pazar',
-  barracks: 'Kışla', watchtower: 'Gözetleme kulesi', hall: 'Toplantı evi', shrine: 'Tapınak',
+  campfire: 'Ortak ocak', hut: 'Kulübe', house: 'Ev', granary: 'Ambar', well: 'Kuyu',
+  lumberyard: 'Oduncu alanı', mine: 'Maden', workshop: 'Atölye', market: 'Pazar',
+  barracks: 'Kışla', watchtower: 'Gözetleme kulesi', hall: 'Yönetim evi', shrine: 'Tapınak',
 };
 const RELATION = { neutral: 'Tarafsız', peace: 'Barış', trade: 'Ticaret', war: 'Savaş' };
 const EVENT_ICON = { info: 'info', birth: 'heart', death: 'cross', founding: 'flag', growth: 'village', migration: 'footsteps', trade: 'trade', war: 'sword', peace: 'sprout', discovery: 'sparkle', fire: 'fire' };
@@ -81,6 +81,17 @@ function label(mapping, key, fallback = '—') { return mapping[key] ?? (key ? S
 function seasonAt(day) { return ['spring', 'summer', 'autumn', 'winter'][Math.floor(Math.max(0, number(day)) / 24) % 4]; }
 function eventDate(day) { const d = Math.max(0, number(day)); return 'Y' + format(Math.floor(d / 96) + 1) + ' · ' + String(Math.floor(d % 96) + 1).padStart(2, '0'); }
 function fullDate(day) { const d = Math.max(0, number(day)); return 'Yıl ' + format(Math.floor(d / 96) + 1) + ' · ' + SEASON[seasonAt(d)][0] + ' · ' + format(Math.floor(d % 24) + 1) + '. gün'; }
+function activity(agent) {
+  const action = agent.action || {};
+  const moving = number(agent.pathIndex) < list(agent.path).length;
+  if (action.tradeReturn) return ['Takas yükünü eve taşıyor', 'trade'];
+  if (moving && !['migrate', 'flee', 'walk'].includes(action.type)) return ['Çalışacağı yere gidiyor', 'footsteps'];
+  if (action.type === 'mine' && action.resource === 'stone') return ['Taş çıkarıyor', 'stone'];
+  if (action.type === 'heal' && action.resource === 'herbs') return ['Şifalı ot topluyor', 'sprout'];
+  if (action.type === 'fight' && action.training) return ['Savaş eğitimi yapıyor', 'shield'];
+  if (action.type === 'farm') return [{ plant: 'Yeni tarla ekiyor', tend: 'Ekinleri sulayıp bakıyor', harvest: 'Olgun ürünü biçiyor' }[action.operation] || 'Tarlayla ilgileniyor', 'wheat'];
+  return ACTION[action.type] || ['Çevresini gözlemliyor', 'eye'];
+}
 function section(title, body, annotation = '') {
   return '<section class="inspector-section"><div class="inspector-section-title"><span>' + escapeHtml(title) + '</span>' + (annotation ? '<span>' + escapeHtml(annotation) + '</span>' : '') + '</div>' + body + '</section>';
 }
@@ -185,7 +196,7 @@ function personInspector(agent, world, snapshot) {
     const value = percent(agent.traits[key]);
     return '<div class="trait-dimension"><span>' + text + '</span><span class="trait-dots" role="img" aria-label="' + text + ' ' + format(value) + '%">' + Array.from({ length: 5 }, function (_, i) { return '<i' + (value >= (i + 1) * 20 - 10 ? ' class="filled"' : '') + '></i>'; }).join('') + '</span><strong>' + format(value) + '</strong></div>';
   }).join('');
-  const act = ACTION[agent.action?.type] || [agent.action?.type || 'Çevresini gözlemliyor', 'eye'];
+  const act = activity(agent);
   const lifeStage = agent.lifeStage || (number(agent.age) < 3 ? 'baby' : number(agent.age) < 12 ? 'child' : number(agent.age) < 18 ? 'teen' : number(agent.age) < 58 ? 'adult' : 'elder');
   const skills = Object.entries(agent.skills || {}).filter(function ([, value]) { return Number.isFinite(Number(value)) && Number(value) > 0; }).sort(function (a, b) { return number(b[1]) - number(a[1]); }).slice(0, 5);
   const family = '<div class="detail-row"><span>Yaşadığı yer</span>' + (home ? '<button data-select-type="settlement" data-select-id="' + escapeHtml(home.id) + '" data-focus-key="home">' + escapeHtml(home.name) + '</button>' : '<strong>Yolculukta</strong>') + '</div>' +
@@ -342,13 +353,13 @@ export function createUI({ getSnapshot, actions }) {
     setText('population-output', format($('world-population').value) + ' kişi');
     const climate = ['balanced', 'lush', 'dry'].includes(settings.climate) ? settings.climate : 'balanced';
     document.querySelectorAll('input[name="climate"]').forEach(function (input) { input.checked = input.value === climate; });
-    $('world-aggression').value = String(clamp(settings.aggression ?? 1, 0, 2));
+    $('world-aggression').value = String(clamp(settings.aggression ?? 1, 0, 3));
     updateAggressionLabel();
     dialogOpen('new-world-dialog');
   }
   function updateAggressionLabel() {
     const value = number($('world-aggression').value, 1);
-    setText('aggression-output', value === 0 ? 'Barışçıl' : value < .75 ? 'Sakin' : value <= 1.25 ? 'Dengeli' : value < 2 ? 'Rekabetçi' : 'Sert rekabet');
+    setText('aggression-output', value === 0 ? 'Barışçıl' : value < .75 ? 'Sakin' : value <= 1.25 ? 'Dengeli' : value < 2 ? 'Rekabetçi' : value < 2.75 ? 'Sert rekabet' : 'Çetin rekabet');
   }
   function selectAndFocus(type, id) {
     const selection = { type, id };
@@ -386,6 +397,7 @@ export function createUI({ getSnapshot, actions }) {
       case 'new-world': openNewWorld(); break;
       case 'save': runAction('save'); saveMenu.open = false; break;
       case 'load': runAction('load'); saveMenu.open = false; break;
+      case 'load-autosave': runAction('loadAutosave'); saveMenu.open = false; break;
       case 'export': runAction('exportSave'); saveMenu.open = false; break;
       case 'import': $('save-file-input').click(); saveMenu.open = false; break;
       case 'sound': runAction('toggleSound'); break;
@@ -614,6 +626,8 @@ export function createUI({ getSnapshot, actions }) {
       setText('save-status', Number.isFinite(date.getTime()) ? 'Son kayıt ' + date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : 'Dünyan kaydedildi');
     }
     else setText('save-status', 'Hikâyene sonra devam et');
+    const autosaveDate = new Date(current.lastAutosaved || '');
+    setText('autosave-status', Number.isFinite(autosaveDate.getTime()) ? 'Otomatik kayıt ' + autosaveDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : 'Henüz otomatik kayıt yok');
     renderInspector();
     renderChronicle();
   }
