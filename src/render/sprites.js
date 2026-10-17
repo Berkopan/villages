@@ -26,8 +26,15 @@ const TERRAIN_COLORS = {
   winter: { grass: ['#a9b9a0', '#beccb3', '#94a68d'], forest: ['#91a58c', '#a2b69b', '#83977f'], hill: ['#b7c3ae', '#ccd4c0', '#a0b29b'], sand: ['#c7c5ac', '#d1d0ba', '#b6b59c'] },
 };
 
-const atlas = new Map();
-const MAX_ATLAS = 4800;
+// A long-running simulation creates many character animation variants. Keeping
+// thousands of independent Canvas bitmaps alive can exhaust browser canvas/GPU
+// backing stores; when that happens the cached terrain sprites may turn fully
+// transparent, leaving only shorelines and actors visible on the main map.
+const environmentAtlas = new Map();
+const peopleAtlas = new Map();
+const MAX_ENVIRONMENT_SPRITES = 512;
+const MAX_PERSON_SPRITES = 1024;
+const MAX_ATLAS = MAX_ENVIRONMENT_SPRITES + MAX_PERSON_SPRITES;
 
 export function hashValue(value) {
   const text = String(value ?? 0);
@@ -57,25 +64,53 @@ function makeCanvas(width, height) {
 }
 
 function cached(key, width, height, anchorX, anchorY, paint) {
-  if (atlas.has(key)) return atlas.get(key);
+  const person = key.startsWith('person:');
+  const bucket = person ? peopleAtlas : environmentAtlas;
+  const cachedSprite = bucket.get(key);
+  if (cachedSprite) {
+    // LRU eviction avoids retaining long-dead generations at the expense of
+    // the sprites the current world is using.
+    bucket.delete(key);
+    bucket.set(key, cachedSprite);
+    return cachedSprite;
+  }
   const { canvas, ctx } = makeCanvas(width, height);
   paint(ctx);
   const sprite = { canvas, width, height, anchorX, anchorY };
-  // Atlas keys contain only bounded visual states, not time or world position.
-  if (atlas.size >= MAX_ATLAS) {
-    let removed = 0;
-    for (const oldKey of atlas.keys()) {
-      if (oldKey.startsWith('person:')) {
-        atlas.delete(oldKey);
-        if (++removed >= 500) break;
-      }
-    }
-    // A long-lived world can also accumulate seasons and many culture colors.
-    // Preserve a hard bound even if the oldest entries are all environment art.
-    while (atlas.size > MAX_ATLAS - 200) atlas.delete(atlas.keys().next().value);
-  }
-  atlas.set(key, sprite);
+  const limit = person ? MAX_PERSON_SPRITES : MAX_ENVIRONMENT_SPRITES;
+  if (bucket.size >= limit) bucket.delete(bucket.keys().next().value);
+  bucket.set(key, sprite);
   return sprite;
+}
+
+/**
+ * Recover cached terrain bitmaps after the browser discards their backing
+ * storage. Opaque terrain textures must have alpha 255 at their top-left pixel.
+ * Probe just a handful of variants at ground-rebuild time rather than doing
+ * costly synchronous GPU readbacks for every tile on every frame.
+ *
+ * Returns true if stale environment sprites were discarded and must be
+ * recreated. Person sprites and simulation state are deliberately untouched.
+ */
+export function recoverTerrainSprites(season = 'spring') {
+  const suffix = ':' + normalizeSeason(season);
+  const candidates = [];
+  for (const [key, sprite] of environmentAtlas) {
+    if (key.startsWith('ground:') && key.endsWith(suffix)) candidates.push(sprite);
+  }
+  if (!candidates.length) return false;
+  const step = Math.max(1, Math.floor(candidates.length / 8));
+  for (let i = 0; i < candidates.length; i += step) {
+    try {
+      const ctx = candidates[i].canvas.getContext('2d');
+      if (ctx?.getImageData(0, 0, 1, 1).data[3] === 255) continue;
+    } catch {
+      // A lost or unavailable bitmap must not be reused for the next ground.
+    }
+    environmentAtlas.clear();
+    return true;
+  }
+  return false;
 }
 
 const rect = (ctx, color, x, y, w, h) => {
@@ -758,8 +793,6 @@ export function drawPortrait(ctx, agent, size = 64, time = 0) {
 }
 
 export function getAtlasStats() {
-  let people = 0;
-  for (const key of atlas.keys()) if (key.startsWith('person:')) people++;
-  return { sprites: atlas.size, people, max: MAX_ATLAS };
+  return { sprites: environmentAtlas.size + peopleAtlas.size, people: peopleAtlas.size, max: MAX_ATLAS };
 }
 
