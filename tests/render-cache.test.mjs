@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getAgentSprite, getAtlasStats, getTerrainSprite, recoverTerrainSprites } from '../src/render/sprites.js';
+import { getAgentSprite, getBuildingSprite, getAtlasStats, getTerrainSprite, recoverTerrainSprites } from '../src/render/sprites.js';
 
 // Node has no browser canvas. This small fake tracks the opacity of sprite
 // bitmaps and lets us emulate a browser discarding one under memory pressure.
@@ -52,10 +52,16 @@ test('crowded worlds cannot evict environment sprites with person animations', (
       };
       getAgentSprite(agent, index / 5);
     }
+    // Hundreds of independent settlement colors and building variants must
+    // also leave the dedicated ground atlas untouched.
+    for (let index = 0; index < 550; index++) {
+      const color = '#' + (index + 0x100000).toString(16).padStart(6, '0');
+      getBuildingSprite({ type: 'hut', level: 1, progress: 1 }, color, season);
+    }
     const stats = getAtlasStats();
     assert.ok(stats.people <= 1024, 'bounded character atlas');
     assert.ok(stats.sprites <= stats.max, 'bounded total bitmap count');
-    assert.strictEqual(getTerrainSprite('grass', 1, season), terrain, 'terrain cannot be pushed out by character churn');
+    assert.strictEqual(getTerrainSprite('grass', 1, season), terrain, 'terrain cannot be pushed out by character or building churn');
     assert.ok(stats.sprites >= before.sprites);
   } finally {
     if (previous === undefined) delete globalThis.OffscreenCanvas;
