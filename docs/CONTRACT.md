@@ -1,46 +1,118 @@
-# Villages integration contract
+# Teknik sözleşme ve geliştirme noktaları
 
-Runtime: dependency-free ES modules, Canvas 2D, static relative URLs. Root owns main.js, persistence, integration, tests, documentation and repository. Simulation agent owns src/sim/*, visual agent owns src/render/*, interface agent owns index.html and src/ui/*. Do not commit independently.
+Villages; çalışma zamanında bağımlılığı olmayan ES modülleri, Canvas 2D ve tarayıcı API'lerinden oluşur. Simülasyon DOM'a bağımlı değildir. Node içinde aynı motorla test, uzun koşu veya kayıt analizi yapılabilir.
 
-## Simulation API (src/sim/engine.js)
+## Modül sınırları
 
-- `createWorld(options = {})`: serializable world; seed string, width 88, height 64, population 96, climate balanced/dry/lush, aggression 1, maxPopulation 500. No DOM dependency.
-- `stepWorld(world, dt = 0.1)`: advances the world by simulated days; fixed caller dt, deterministic. Root uses 10 fixed updates per real second at 1x.
-- `getStats(world)`: numeric world summary (population, settlements, food, wood, stone, births, deaths, wars, avgAge, avgLevel, happiness).
-- `applyIntervention(world, type, x, y, options = {})`: inspect has no mutation; supported actual interventions rain, food, trees, settlers, fire.
-- `restoreWorld(data)`: restores a validated JSON world and any engine caches. Root performs envelope/version/security validation before this. Can simply return data when caches are lazy.
-- `getTile(world, x, y)`: safe tile lookup.
+| Modül | Sorumluluk |
+|---|---|
+| `src/sim/random.js` | Tohumdan başlayan, durumu kaydedilebilir rastgele sayı üreteci |
+| `src/sim/worldgen.js` | Arazi, biyomlar, kaynaklar, geçitler ve bağlı kara bölgeleri |
+| `src/sim/model.js` | Varlık üretimi, kimlikler, genetik, deneyim, olaylar ve sabitler |
+| `src/sim/navigation.js` | Kaynak araması, doğrudan yol denetimi ve sınırlı A* |
+| `src/sim/ecosystem.js` | İklim, kaynak yenilenmesi, tarla, yangın ve hayvanlar |
+| `src/sim/engine.js` | İhtiyaçlar, eylemler, üretim, toplum, aile, göç ve diplomasi |
+| `src/render/sprites.js` | Ortak piksel çizimleri ve sınırlı sprite atlası |
+| `src/render/renderer.js` | Dünya katmanları, kamera, pointer etkileşimi ve minimap |
+| `src/ui/ui.js` | Durumdan üretilen arayüz, defter, kronik, form ve kontroller |
+| `src/persistence.js` | Kayıt zarfı, sürüm, doğrulama, JSON ve iki depolama yuvası |
+| `src/audio.js` | İstek üzerine açılan, tarayıcıda sentezlenmiş ortam sesi |
+| `src/main.js` | Sabit adım döngüsü, modüllerin bağlantısı, kayıt ve kısayollar |
 
-World: `{version,seed,width,height,tick,day,year,season,weather,agents,tiles,buildings,farms,settlements,events,history,effects,...engine state}`. Arrays, plain objects, primitive values only (no functions/Maps/Sets in serialized state).
+Çizici veya arayüz, simülasyonun RNG'sini tüketmez ve dünya verisini değiştirmez. Kullanıcı işlemleri `main.js` eylemlerine, dünyayı değiştiren müdahaleler motor API'sine gider. Arayüz verileri yaklaşık saniyede dört kez yenilenir; harita ayrı animasyon döngüsünde çizilir.
 
-Tiles: flattened row-major `tiles[y * width + x]`. `{x,y,biome,elevation,moisture,fertility,trees,food,stone,ore,fish,road,fire,...}`. Biomes: `deepwater`, `water`, `sand`, `grass`, `forest`, `hill`, `mountain`, `snow`. Water and high mountains are nonwalkable. Numeric resources >=0. Define/share exact interpretation of tree quantities.
+## Motor API'si
 
-Agents: `{id,name,sex,age,lifeStage,x,y,vx,vy,direction,appearance:{skin,hair,hairStyle,outfit,accent,...},role,level,xp,skills,action:{type,targetX,targetY,progress,...},health,hunger,energy,morale,traits,inventory,settlementId,homeId,parents,partnerId,childrenIds,...}`. Age in years; health/energy/morale 0..100, hunger 0 full..100 starving. Life stages baby/child/teen/adult/elder. Positions in tile units. Dead removed from agents; bounded grave/memorial records separately if desired. Roles: gatherer, farmer, lumberjack, miner, fisher, hunter, builder, smith, healer, trader, warrior, scholar. Standard action types: idle, walk, gather, farm, chop, mine, fish, hunt, build, craft, heal, trade, fight, flee, migrate, eat, rest, socialize, study. Direction 0..3 or string; renderer must normalize. Boolean alive optional.
+`src/sim/engine.js` şu dışa aktarımları sunar:
 
-Buildings: `{id,type,x,y,level,progress,settlementId,...}` (progress 0..1). Types: campfire, hut, house, granary, well, lumberyard, mine, workshop, market, barracks, watchtower, hall, shrine. Farms separate: `{id,x,y,growth,water,ripe,settlementId,...}`.
+```js
+createWorld(options = {})
+stepWorld(world, dt = 0.1)
+getStats(world)
+applyIntervention(world, type, x, y, options = {})
+restoreWorld(data)
+getTile(world, x, y)
+DAYS_PER_YEAR
+DAYS_PER_SEASON
+```
 
-Settlements: `{id,name,color,x,y,stage,population,stockpile,knowledge,prosperity,relations,...}`. Stockpile resource keys: food, wood, stone, ore, tools, medicine. Stage: camp, hamlet, village, town, city. Relations object keyed by settlement id; document exact relation shape. Civilization growth from conditions, not elapsed dates.
+`createWorld` seçenekleri `seed`, `width`, `height`, `population`, `climate`, `aggression`, `maxPopulation` alanlarıdır. Motor boyutları 40–160 × 32–112, nüfusu 0–500 aralığına sınırlar. Arayüz daha küçük bir başlangıç seçenek kümesi sunar. İklim `balanced`, `lush` veya `dry`; saldırganlık 0–3 aralığındadır.
 
-Events: `{id,day,type,title,description,x,y,agentId,settlementId,...}`. Type info/birth/death/founding/growth/migration/trade/war/peace/discovery/fire; bounded recent chronicle. Titles/descriptions Turkish initially. History samples `{day,population,food,births,deaths,wars,...}`.
+`stepWorld`, `(0, 1]` aralığında simülasyon günü kabul eder ve dünyayı yerinde değiştirir. Uygulama daima `0.1` kullanır. Farklı adım büyüklüklerinin aynı davranış dizisini üretmesi beklenmez. Tekrarlanabilirlik için aynı sürüm, başlangıç seçenekleri ve aynı sırada sabit adımlar kullanılmalıdır.
 
-## Renderer API (src/render/renderer.js)
+Adımda hayvanlar, geçici etkiler ve insanlar ilerler; ölenler ayrılır. Yeni gün tamamlandığında ekosistem, yerleşim kuruluşu ve gelişimi, nüfus, diplomasi ve göç değerlendirilir. Tarih örneği bu işlemlerden sonra gerçek sayaçlardan alınır. Sonuçlar görüntüleme saatinden türetilmez.
 
-Export class `WorldRenderer` constructed with `(canvas, {onSelect, onHover, onPaint, onCameraChange} = {})`.
-- `setWorld(world)` when replacing world.
-- `render(world, {time,alpha,selected,overlay,tool,follow,paused,...} = {})` every animation frame. time is seconds, alpha interpolation fraction; selected is `{type:'agent'|'settlement'|'building'|'tile',id?,x?,y?}` or null; overlay default `natural`, others `territory`, `fertility`, `resources`, `danger`.
-- `resize()` reads canvas parent dimensions/device scale. ResizeObserver preferred.
-- `focus(x,y,zoom?)`, `zoomBy(factor)`, `fitWorld()`, `destroy()`.
-- `drawMinimap(canvas, world, selected?)` method or equivalent export.
-- `drawPortrait(ctx, agent, size=64)` export in sprites.js or renderer.js (communicate location).
-Camera/pan/zoom/pointer selection belongs renderer. Screen coordinates convert to tile coordinates before callbacks. `onSelect(selection)`, `onHover({x,y,...}|null)`, `onPaint({type,x,y})` uses current render tool; tools include inspect/rain/food/trees/settlers/fire. `onCameraChange(camera)` optional. Right click or drag pans, click selects; wheel zoom; pinch on touch. Do not draw pixel art using emoji.
+`applyIntervention` için `rain`, `food`, `trees`, `settlers`, `fire` gerçek değişiklik uygular ve `{ ok, changed, message }` döndürür. `inspect` yalnız hücreyi döndürür. Hücre koordinatları harita birimindedir. `getTile`, dışarıda veya sonlu olmayan koordinatlarda `null` döndürür.
 
-## UI API (src/ui/ui.js)
+`restoreWorld` motorun yapısal önkoşullarını denetler ve geçici önbellekleri sıfırlar. Harici JSON için önce `decodeSave` kullanılmalıdır; `restoreWorld` tek başına tam dosya doğrulayıcısı değildir.
 
-Export `createUI({getSnapshot, actions})` returns `{update(snapshot?),toast(message,type?),destroy()}`. index.html loads `./src/main.js` and CSS `./src/ui/style.css`, exposes `#world-canvas` and `#minimap` canvas.
-Snapshot `{world,stats,speed,paused,selected,overlay,tool,follow,fps,saving,lastSaved,...}`.
-Actions `{setSpeed,togglePause,step,setOverlay,setTool,select,focus,follow,newWorld,save,load,exportSave,importSave,zoomIn,zoomOut,fitWorld,toggleSound}`. `newWorld(options)` options follow engine contract; importSave receives File; focus receives selection or `{x,y}`; follow takes boolean. Save/load localStorage; export/import JSON.
-UI should not read/step engine directly. Root updates ~4 times/sec. Display real values, derived labels can map string codes. Every control accessible and functional; responsive drawer; dialogs keyboard accessible. Character portrait uses actual same sprite renderer, drawn by UI.
+### Başsız kullanım
 
-## Coordination
+```js
+import { createWorld, stepWorld, getStats } from './src/sim/engine.js';
+import { encodeSave, decodeSave } from './src/persistence.js';
 
-Tell other agents of schema additions and concrete naming deviations before integration. Strong defaults and fallbacks allow incremental implementation. Record mechanics in source comments; add focused invariant tests with Node built-in test runner where substantive behavior needs verification.
+const world = createWorld({ seed: 'bereket', population: 192, climate: 'lush' });
+for (let i = 0; i < 60000; i++) stepWorld(world, 0.1);
+console.log(getStats(world));
+const portable = encodeSave(world, { speed: 25, overlay: 'natural' });
+const checked = decodeSave(portable);
+```
+
+## Dünya verisi
+
+Dünya JSON ile tam olarak ifade edilir; kaydın içinde fonksiyon, DOM düğümü, `Map` veya `Set` yoktur. Çalışma zamanı mekânsal önbellekleri `WeakMap` içinde, kayıt dışında tutulur.
+
+- **Zaman ve yürütme:** `version`, `seed`, `tick`, `day`, `year`, `season`, `rngState`, `nextId`, `lastDailyDay`, `weather`, `config`.
+- **Arazi:** `tiles[y * width + x]`. Hücreler konum, biyom, yükseklik, nem, verim, kaynaklar, yol, yanma ve kara bölgesi taşır. Yükseklik deniz tabanında negatif olabilir. Kaynaklar negatif olamaz; `trees` sürekli biyokütledir.
+- **İnsanlar:** `agents`; gerçek yaş, 0–100 ihtiyaçlar, 12 mesleğin becerisi, seviye, görünüm, kişilik, envanter, aile ve yerleşim referansları. `action` hedef ve çalışma ilerlemesini; `path` ve `pathIndex` gerçek yolculuğu; `pendingAction` moladan sonra sürülecek görevi taşır.
+- **Yerleşimler:** `settlements`; nüfus, evre, stok, üretim, altı bilgi alanı, refah, toplumsal uyum, ilişkiler ve lider. `stage`, `camp / hamlet / village / town / city` değerlerinden biridir. Sıfır nüfuslu yerleşimler harita tarihinin parçası olarak kalabilir.
+- **Yapılar ve tarlalar:** `buildings`, `farms`; ayrı ilerleme, sağlık, kullanım ve sahiplik alanları. Yapı ve tarla konumları tamsayı hücreleridir; çizim merkezi `x + 0.5, y + 0.5` olur. İnsan konumları kesirlidir.
+- **Yaşam ve tarih:** `animals`, `events`, `history`, `effects`, `graves`, `metrics`. Olaylar 180, grafik örnekleri 720, mezarlar 180, geçici efektler 100 kayıtla sınırlıdır. Toplam sayaçlar ayrı tutulur.
+
+Kimlikler ortak ve artan bir sayısal diziden üretilir. `nextId`, saklanan bütün varlık ve tarihsel bağlantı kimliklerinin üzerinde olmalıdır. Mezar kimliği, ölen insanın eski kimliğidir; yeni bir insan veya bağımsız varlık kimliği değildir.
+
+Açlıkta **yüksek değer kötü**, sağlık/enerji/moralde yüksek değer iyidir. Arayüz tokluğu `100 - hunger` olarak gösterir. Yaş yıl, motor adımı gün cinsindedir. Yönler `0: kuzey, 1: doğu, 2: güney, 3: batı` olarak tutulur.
+
+## Çizim ve arayüz API'leri
+
+```js
+const renderer = new WorldRenderer(canvas, {
+  onSelect, onHover, onPaint, onCameraChange,
+});
+renderer.setWorld(world);
+renderer.render(world, { time, alpha, selected, overlay, tool, follow, paused });
+renderer.drawMinimap(minimapCanvas, world, selected);
+renderer.focus(x, y, zoom);
+renderer.zoomBy(factor);
+renderer.fitWorld();
+renderer.resize();
+renderer.destroy();
+```
+
+`time` animasyon için saniyedir. Seçim `{ type: 'agent' | 'settlement' | 'building', id }`, `{ type: 'tile', x, y }` veya `null` olur. Katmanlar `natural`, `territory`, `fertility`, `resources`, `danger`; araçlar `inspect`, `rain`, `food`, `trees`, `settlers`, `fire` değerleridir. Kamera kullanıcı tarafından taşındığında `onCameraChange` içindeki `userInput` takibi bırakmak için kullanılır.
+
+Zemin önbelleğe alınır. Yakın görünümde çevre ve varlıklar Y konumuna göre çizilir; tam haritada doğal çevre ayrı bir önbellek katmanındadır. Seviye, meslek, yaş, görünüm ve hareket değişkenleri sprite anahtarında yer alır. Atlas 4.800 öğede sınırlandırılır. `drawPortrait(ctx, agent, size, time)` aynı insan çizimini defterde kullanır.
+
+```js
+const ui = createUI({ getSnapshot, actions });
+ui.update(snapshot);
+ui.toast(message, type);
+ui.destroy();
+```
+
+Snapshot: `{ world, stats, speed, paused, selected, overlay, tool, follow, fps, lastSaved, lastAutosaved, saving, soundEnabled }`.
+
+Eylemler: `setSpeed`, `togglePause`, `step`, `setOverlay`, `setTool`, `select`, `focus`, `follow`, `newWorld`, `save`, `load`, `loadAutosave`, `exportSave`, `importSave`, `zoomIn`, `zoomOut`, `fitWorld`, `toggleSound`. `importSave` bir `File` alır. Arayüz bağımsız bir simülasyon döngüsü başlatmaz. Dışarıdan gelen metinler HTML'e eklenmeden önce kaçışlanır.
+
+## Kayıt zarfı ve devamlılık
+
+Kayıt biçimi `{ format: 'villages-world', version: 1, savedAt, view, world }` yapısındadır. `view` hız ve harita katmanını taşır. Dosya sınırı 16 MB'dir. Boyut, sürüm, sonlu sayılar, diziler, konumlar, ihtiyaçlar, stoklar, yollar, aileler, kimlikler ve sayaçlar canlı dünya değiştirilmeden önce doğrulanır.
+
+Elle kayıt `villages.world.v1`, otomatik kayıt `villages.autosave.v1` anahtarındadır. Yeniden yüklemede geçen gerçek dünya saati simülasyona eklenmez. Kaydedilmiş dünya duraklatılarak açılır; kaydedilen rastgelelik ve süreç durumundan devam eder.
+
+## Yeni sistem ekleme
+
+Yeni bir kaynak veya meslek eklemek; modelde alanı tanımlamayı, üretim/tüketim kurallarını, ihtiyaç ağırlıklarını, kayıt doğrulamasını, defter etiketlerini ve ilgili piksel eylemini birlikte güncellemeyi gerektirir. Kaynak artışının girdisini ve kaynağın nereye taşındığını açıkça belirle. Günlük veya adımlık sürece eklerken RNG çağrı sırasının mevcut tohum sonuçlarını değiştirebileceğini hesaba kat.
+
+Yeni kayıt alanı eklenirse alanın devam eden bir süreci etkileyip etkilemediğini değerlendir. Gerekirse kayıt sürümünü ve açık bir göç dönüşümünü ekle. `Math.random`, render kare sayısı veya gerçek saatten simülasyon kararı üretme. Anlamlı testler; kaynak/nüfus muhasebesini, fiziksel ulaşılabilirliği, kayıt devamını ve yeni kuralın olumlu/olumsuz koşullarını denetlemelidir.
