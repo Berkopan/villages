@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171d1b">
+  <meta name="description" content="Küçük hayatlar, büyük medeniyetler. Tohumdan doğan, kendi kurallarıyla gelişen canlı bir piksel dünya simülasyonu.">
+  <title>Villages — Küçük hayatlar, büyük hikâyeler</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2326322b'/%3E%3Cpath d='M6 17h3v-3h3v-3h8v3h3v3h3v3H6z' fill='%23d1ae6a'/%3E%3Cpath d='M9 20h14v7H9z' fill='%23e9dfc8'/%3E%3Cpath d='M14 22h4v5h-4z' fill='%2326322b'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./src/ui/style.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="app-header">
+      <a class="brand" href="./" aria-label="Villages ana sayfa">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M6 21h4v-4h4v-4h12v4h4v4h4v4H6z" fill="currentColor"/><path d="M10 25h20v10H10z" fill="#e8dec5"/><path d="M17 28h6v7h-6z" fill="#252f28"/><path d="M23 3h2v10h-2z" fill="#e8dec5"/><path d="M25 3h9v6h-9z" fill="#94b39b"/></svg></span>
+        <span class="brand-word">villages<span class="brand-caption">KÜÇÜK HAYATLAR, BÜYÜK HİKÂYELER</span></span>
+      </a>
+      <div class="header-divider" aria-hidden="true"></div>
+      <div class="world-identity">
+        <span class="eyebrow">DÜNYA TOHUMU</span>
+        <span class="seed-name" id="seed-name">Yeni bir başlangıç</span>
+      </div>
+      <div class="header-actions">
+        <button class="button button-subtle new-world-button" data-action="new-world"><span data-icon="sprout"></span><span>Yeni dünya</span></button>
+        <details class="save-menu" id="save-menu">
+          <summary class="icon-button" aria-label="Dünyayı kaydet veya yükle" title="Kaydet ve yükle"><span data-icon="save"></span></summary>
+          <div class="dropdown-panel">
+            <div class="dropdown-label">BU DÜNYAYI SAKLA</div>
+            <button data-action="save"><span data-icon="save"></span><span>Tarayıcıya kaydet<small id="save-status">Hikâyene sonra devam et</small></span></button>
+            <button data-action="load"><span data-icon="history"></span><span>Kayıtlı dünyayı aç<small>Bu tarayıcıdaki son kayıt</small></span></button>
+            <div class="dropdown-separator"></div>
+            <button data-action="export"><span data-icon="download"></span><span>Dosya olarak indir</span></button>
+            <button data-action="import"><span data-icon="upload"></span><span>Dosyadan yükle</span></button>
+          </div>
+        </details>
+        <button class="icon-button" id="sound-button" data-action="sound" aria-label="Ortam sesini aç" aria-pressed="false" title="Ortam sesi"><span data-icon="sound-off"></span></button>
+        <button class="icon-button" data-action="help" aria-label="Rehber ve klavye kısayolları" title="Rehber ve kısayollar"><span data-icon="help"></span></button>
+      </div>
+    </header>
+
+    <section class="world-bar" aria-label="Dünya özeti ve zaman">
+      <div class="world-metrics">
+        <div class="top-metric"><span class="metric-icon" data-icon="people"></span><div><span class="metric-label">Nüfus</span><strong id="stat-population">—</strong></div><span class="metric-trend" id="population-trend"></span></div>
+        <div class="top-metric"><span class="metric-icon" data-icon="village"></span><div><span class="metric-label">Yerleşim</span><strong id="stat-settlements">—</strong></div></div>
+        <div class="top-metric"><span class="metric-icon" data-icon="wheat"></span><div><span class="metric-label">Yiyecek</span><strong id="stat-food">—</strong></div></div>
+        <div class="top-metric happiness-metric"><span class="metric-icon" data-icon="heart"></span><div><span class="metric-label">Mutluluk</span><strong id="stat-happiness">—</strong></div></div>
+      </div>
+      <div class="time-controls">
+        <div class="calendar"><span class="season-symbol" id="season-icon" data-icon="sprout"></span><div><strong id="calendar-year">Yıl 1 · İlkbahar</strong><span id="calendar-day">1. gün</span></div></div>
+        <div class="time-control-divider" aria-hidden="true"></div>
+        <button class="pause-button" id="pause-button" data-action="pause" aria-label="Simülasyonu duraklat" aria-pressed="false" title="Duraklat / sürdür · Boşluk"><span data-icon="pause"></span></button>
+        <div class="speed-group" role="group" aria-label="Simülasyon hızı">
+          <button class="speed-button active" data-speed="1" aria-pressed="true" title="Normal hız · 1">1×</button>
+          <button class="speed-button" data-speed="2" aria-pressed="false" title="2 kat hız · 2">2×</button>
+          <button class="speed-button" data-speed="5" aria-pressed="false" title="5 kat hız · 3">5×</button>
+          <button class="speed-button" data-speed="10" aria-pressed="false" title="10 kat hız · 4">10×</button>
+          <button class="speed-button" data-speed="25" aria-pressed="false" title="25 kat hız · 5">25×</button>
+        </div>
+        <button class="icon-button step-button" data-action="step" aria-label="Bir simülasyon adımı ilerlet" title="Bir adım ilerlet"><span data-icon="step"></span></button>
+      </div>
+    </section>
+
+    <main class="main-layout">
+      <div class="world-column">
+        <section class="world-stage" id="world-stage" aria-label="Canlı piksel dünyası">
+          <canvas id="world-canvas" tabindex="0" aria-label="Canlı dünya. Seçmek için tıkla, gezinmek için sürükle, yakınlaştırmak için tekerleği kullan."></canvas>
+          <div class="stage-topline">
+            <div class="live-badge" id="live-badge"><span class="live-dot"></span><span id="live-label">CANLI DÜNYA</span></div>
+            <label class="overlay-control"><span data-icon="layers"></span><select id="overlay-select" aria-label="Harita katmanı"><option value="natural">Doğal görünüm</option><option value="territory">Medeniyet sınırları</option><option value="fertility">Toprak verimliliği</option><option value="resources">Doğal kaynaklar</option><option value="danger">Tehlike haritası</option></select><span class="select-chevron" data-icon="chevron-down"></span></label>
+          </div>
+          <div class="tool-dock" role="toolbar" aria-label="Dünyayla etkileşim araçları">
+            <button class="tool-button active" data-tool="inspect" aria-pressed="true" aria-label="Gözlemle" title="Gözlemle"><span data-icon="cursor"></span><span class="tool-tooltip">Gözlemle<span>Bir yaşamı veya toprağı seç</span></span></button>
+            <div class="dock-separator"></div>
+            <button class="tool-button" data-tool="rain" aria-pressed="false" aria-label="Yağmur yağdır" title="Yağmur yağdır"><span data-icon="rain"></span><span class="tool-tooltip">Yağmur<span>Toprağa can ver</span></span></button>
+            <button class="tool-button" data-tool="food" aria-pressed="false" aria-label="Yiyecek ekle" title="Yiyecek ekle"><span data-icon="wheat"></span><span class="tool-tooltip">Bereket<span>Doğal yiyecek ekle</span></span></button>
+            <button class="tool-button" data-tool="trees" aria-pressed="false" aria-label="Ağaç dik" title="Ağaç dik"><span data-icon="tree"></span><span class="tool-tooltip">Orman<span>Ağaçlarla dünyayı yeşert</span></span></button>
+            <button class="tool-button" data-tool="settlers" aria-pressed="false" aria-label="Yeni insanlar ekle" title="Yeni insanlar ekle"><span data-icon="people-add"></span><span class="tool-tooltip">Yeni hayatlar<span>Bir grup insan ekle</span></span></button>
+            <button class="tool-button tool-destructive" data-tool="fire" aria-pressed="false" aria-label="Ateş başlat" title="Ateş başlat"><span data-icon="fire"></span><span class="tool-tooltip">Ateş<span>Ekosistemin dayanıklılığını izle</span></span></button>
+          </div>
+          <div class="map-weather" id="map-weather"><span data-icon="sun"></span><span>Açık</span><span class="weather-temperature">18°</span></div>
+          <div class="active-tool-banner" id="active-tool-banner" hidden><span data-icon="cursor"></span><span id="active-tool-text"></span><button data-action="inspect-tool" aria-label="Gözlem aracına dön"><span data-icon="close"></span></button></div>
+          <div class="selection-follow-chip" id="selection-follow-chip" hidden><span class="live-dot"></span><span id="follow-label">Takip ediliyor</span><button data-action="unfollow" aria-label="Takibi bırak"><span data-icon="close"></span></button></div>
+          <div class="map-hint" id="map-hint"><span data-icon="cursor"></span><span>Bir köylüyü seç. Hikâyesini keşfet.</span><button data-action="dismiss-hint" aria-label="İpucunu kapat"><span data-icon="close"></span></button></div>
+          <div class="map-navigation">
+            <div class="zoom-controls" role="group" aria-label="Harita yakınlaştırma">
+              <button data-action="zoom-in" aria-label="Yakınlaştır" title="Yakınlaştır · +"><span data-icon="plus"></span></button>
+              <button data-action="zoom-out" aria-label="Uzaklaştır" title="Uzaklaştır · −"><span data-icon="minus"></span></button>
+              <button data-action="fit-world" aria-label="Tüm dünyayı göster" title="Tüm dünyayı göster · C"><span data-icon="expand"></span></button>
+            </div>
+            <div class="minimap-frame"><div class="minimap-caption"><span data-icon="compass"></span><span>DÜNYA ATLASI</span></div><canvas id="minimap" width="172" height="124" tabindex="0" role="img" aria-label="Küçük dünya haritası. Bir yere gitmek için tıkla."></canvas></div>
+          </div>
+          <div class="map-status" id="map-status"><span id="map-status-text">Dünya uyanıyor…</span><span id="performance-status"></span></div>
+          <button class="mobile-inspector-button" data-action="open-inspector"><span data-icon="book"></span><span id="mobile-inspector-label">Dünya defteri</span><span data-icon="chevron-up"></span></button>
+        </section>
+
+        <section class="chronicle" aria-label="Dünya kroniği">
+          <div class="section-heading chronicle-heading"><div class="section-heading-title"><span data-icon="history"></span><h2>Dünyanın hikâyesi</h2><span class="subtle-badge" id="chronicle-count">0 olay</span></div><div class="chronicle-controls"><label><span class="sr-only">Olay türünü filtrele</span><select id="event-filter"><option value="all">Tüm olaylar</option><option value="life">Yaşam</option><option value="civilization">Medeniyet</option><option value="conflict">Çatışma</option></select></label><button class="icon-button chronicle-collapse" data-action="toggle-chronicle" aria-expanded="true" aria-label="Kroniği küçült" title="Kroniği küçült"><span data-icon="chevron-down"></span></button></div></div>
+          <div class="chronicle-events" id="chronicle-events" tabindex="0"><div class="empty-chronicle"><span data-icon="sprout"></span><span>Dünya yeni uyandı. İlk hikâyeler birazdan başlayacak.</span></div></div>
+        </section>
+      </div>
+
+      <aside class="inspector" id="inspector-panel" aria-label="Dünya ve karakter ayrıntıları">
+        <div class="inspector-heading"><div><span class="eyebrow" id="inspector-eyebrow">GÖZLEM DEFTERİ</span><h1 id="inspector-title">Dünyanın nabzı</h1></div><button class="icon-button" data-action="close-inspector" id="inspector-close" aria-label="Seçimi temizle ve dünya özetine dön" title="Seçimi temizle · Esc"><span data-icon="close"></span></button></div>
+        <div class="inspector-content" id="inspector-content"><div class="inspector-loading"><span class="live-dot"></span>Dünya hazırlanıyor…</div></div>
+        <div class="inspector-bottom"><span class="status-spark" aria-hidden="true">✦</span><span>Hiçbir hikâye önceden yazılmadı.</span></div>
+      </aside>
+    </main>
+    <footer class="app-footer"><span><span class="footer-dot"></span>KURALLARDAN DOĞAN BİR DÜNYA</span><span class="footer-hint">Sürükle <span>gezin</span><i>·</i>Tekerlek <span>yakınlaş</span><i>·</i>Boşluk <span>duraklat</span></span><button data-action="help">Gözlemci rehberi <span data-icon="arrow-up-right"></span></button></footer>
+  </div>
+
+  <dialog class="world-dialog" id="new-world-dialog" aria-labelledby="new-world-title">
+    <form id="new-world-form">
+      <div class="dialog-heading"><div><span class="eyebrow">BİR BAŞLANGIÇ NOKTASI SEÇ</span><h2 id="new-world-title">Yeni bir dünya.</h2><p>Koşulları sen belirle. Hikâyeyi hayat yazsın.</p></div><button class="icon-button" type="button" data-action="close-dialog" aria-label="Pencereyi kapat"><span data-icon="close"></span></button></div>
+      <label class="form-label" for="world-seed">Dünya tohumu <span>Aynı tohum, aynı başlangıç</span></label>
+      <div class="seed-input-wrap"><input id="world-seed" name="seed" type="text" value="yesil-vadi" maxlength="80" required autocomplete="off" spellcheck="false"><button type="button" data-action="random-seed" aria-label="Rastgele tohum oluştur" title="Rastgele tohum"><span data-icon="shuffle"></span></button></div>
+      <div class="form-two-columns"><div><label class="form-label" for="world-population">İlk insanlar <output id="population-output" for="world-population">96 kişi</output></label><input id="world-population" name="population" type="range" min="24" max="192" value="96" step="8"><div class="range-labels"><span>24 kişi</span><span>192 kişi</span></div></div><div><label class="form-label" for="world-size">Dünyanın büyüklüğü</label><select id="world-size" name="size"><option value="64x48">Küçük · Yakın komşuluk</option><option value="88x64" selected>Orta · Yeni ufuklar</option><option value="112x80">Büyük · Uzun yolculuklar</option></select></div></div>
+      <fieldset class="climate-fieldset"><legend class="form-label">İklim</legend><div class="climate-options"><label class="climate-choice"><input type="radio" name="climate" value="balanced" checked><span class="climate-choice-body"><span data-icon="sprout"></span><strong>Ilıman</strong><small>Dengeli bir başlangıç</small></span></label><label class="climate-choice"><input type="radio" name="climate" value="lush"><span class="climate-choice-body"><span data-icon="tree"></span><strong>Bereketli</strong><small>Yaşamın gürleştiği topraklar</small></span></label><label class="climate-choice"><input type="radio" name="climate" value="dry"><span class="climate-choice-body"><span data-icon="sun"></span><strong>Kurak</strong><small>Kaynaklar için mücadele</small></span></label></div></fieldset>
+      <label class="form-label" for="world-aggression">Çatışma eğilimi <output id="aggression-output" for="world-aggression">Dengeli</output></label><input id="world-aggression" name="aggression" type="range" min="0" max="2" value="1" step="0.25"><div class="range-labels"><span>Barışçıl</span><span>Rekabetçi</span></div>
+      <p class="new-world-note"><span data-icon="info"></span>Yeni dünya mevcut gözlemin yerini alır. Hikâyeni saklamak istersen önce kaydedebilirsin.</p>
+      <div class="dialog-actions"><button class="button button-subtle" type="button" data-action="close-dialog">Geri dön</button><button class="button button-primary" type="submit"><span data-icon="sprout"></span>Dünyayı oluştur<span data-icon="arrow-right"></span></button></div>
+    </form>
+  </dialog>
+
+  <dialog class="help-dialog" id="help-dialog" aria-labelledby="help-title">
+    <div class="dialog-heading"><div><span class="eyebrow">GÖZLEMCİ REHBERİ</span><h2 id="help-title">Hayat kendi yolunu bulur.</h2><p>Sen yönetmek zorunda değilsin. Bak, keşfet, koşulları değiştir.</p></div><button class="icon-button" data-action="close-dialog" aria-label="Rehberi kapat"><span data-icon="close"></span></button></div>
+    <div class="help-intro"><span data-icon="sprout"></span><p>Her insan ihtiyaçları, yetenekleri, yaşı ve çevresindeki kaynaklarla hareket eder. Hayatta kalma çabaları; ailelere, iş bölümüne, yerleşimlere, göçe ve çatışmaya dönüşür. Sonuçlar hazır bir senaryodan gelmez.</p></div>
+    <div class="help-grid"><article><span data-icon="people"></span><h3>Küçük hayatlar</h3><p>Bir kişiyi seçerek yaşını, mesleğini, ihtiyaçlarını ve ailesini gör. Büyüdükçe bedeni, ustalaştıkça görünümü değişir.</p></article><article><span data-icon="village"></span><h3>Birlikte yaşam</h3><p>Kaynaklar, yakınlık ve biriken bilgi yerleşimleri şekillendirir. Bir yerleşimi seçerek erzaklarını ve ilişkilerini incele.</p></article><article><span data-icon="layers"></span><h3>Görünenin altında</h3><p>Harita katmanlarıyla verimli toprağı, kaynakları, medeniyet sınırlarını ve tehlikeleri keşfet.</p></article><article><span data-icon="rain"></span><h3>Küçük bir müdahale</h3><p>Soldaki araçlarla yağmur, yiyecek, ağaç, insan veya ateş ekle. Haritaya tıklayarak sonucu gözlemle.</p></article></div>
+    <div class="help-section-label">ZAMANIN RİTMİ</div><p class="help-time-note">Bir yıl 96, bir mevsim 24 simülasyon günüdür. 1× hızda gerçek bir saniye, bir simülasyon gününü ilerletir. Yüksek hızda nesillerin değişimini görebilirsin.</p>
+    <div class="help-section-label">ELLERİN KLAVYEDEYKEN</div><div class="shortcuts"><div><kbd>Boşluk</kbd><span>Duraklat / sürdür</span></div><div><kbd>1 — 5</kbd><span>Simülasyon hızını seç</span></div><div><kbd>+ / −</kbd><span>Yakınlaştır / uzaklaştır</span></div><div><kbd>F</kbd><span>Seçili kişiye odaklan</span></div><div><kbd>C</kbd><span>Bütün dünyayı göster</span></div><div><kbd>Esc</kbd><span>Seçimi temizle</span></div></div>
+    <div class="help-footnote"><span data-icon="cursor"></span>Masaüstünde sürükleyerek gezin, tekerlekle yakınlaş. Dokunmatik ekranda sürükle, iki parmakla yakınlaştır.</div>
+    <div class="dialog-actions"><button class="button button-primary" data-action="close-dialog">Dünyaya dön<span data-icon="arrow-right"></span></button></div>
+  </dialog>
+  <input type="file" id="save-file-input" accept=".json,application/json" hidden>
+  <div class="toast-region" id="toast-region" role="status" aria-live="polite" aria-atomic="false"></div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
