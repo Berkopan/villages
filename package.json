@@ -1,0 +1,15 @@
+{
+  "name": "villages",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A living pixel world. An emergent civilization simulation in your browser.",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs --host 0.0.0.0 --port 4173",
+    "start": "node scripts/serve.mjs",
+    "test": "node --test --test-isolation=none tests/*.test.mjs",
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "engines": { "node": ">=24" }
+}
