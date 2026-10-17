@@ -1,5 +1,6 @@
 import { icon, hydrateIcons } from './icons.js';
 import { drawPortrait } from '../render/sprites.js';
+import { getLanguage, setLanguage, t, localizeStatic, localizeFresh } from './i18n.js';
 
 const ROLE = {
   gatherer: 'Toplayıcı', farmer: 'Çiftçi', lumberjack: 'Oduncu', miner: 'Madenci',
@@ -264,6 +265,8 @@ function tileInspector(tile, world, building = null) {
 
 export function createUI({ getSnapshot, actions }) {
   hydrateIcons();
+  localizeStatic(document);
+  document.getElementById('language-select').value = getLanguage();
   const abort = new AbortController();
   const signal = abort.signal;
   const timers = new Set();
@@ -284,7 +287,7 @@ export function createUI({ getSnapshot, actions }) {
 
   function setText(id, value) {
     const element = $(id);
-    const text = String(value ?? '');
+    const text = t(value);
     if (element && element.textContent !== text) element.textContent = text;
   }
   function setIcon(element, name) {
@@ -314,7 +317,7 @@ export function createUI({ getSnapshot, actions }) {
     const item = document.createElement('div');
     item.className = 'toast ' + safeType;
     item.innerHTML = icon(safeType === 'success' ? 'check' : safeType === 'error' || safeType === 'warning' ? 'warning' : 'info') + '<span></span><button aria-label="Bildirimi kapat">' + icon('close') + '</button>';
-    item.querySelector('span').textContent = String(message);
+    item.querySelector('span').textContent = t(message);
     let removing = false;
     const remove = function () {
       if (removing) return;
@@ -324,6 +327,7 @@ export function createUI({ getSnapshot, actions }) {
     };
     item.querySelector('button').addEventListener('click', remove, { signal });
     region.append(item);
+    localizeFresh(item);
     while (region.children.length > 4) region.firstElementChild.remove();
     schedule(remove, safeType === 'error' ? 9000 : safeType === 'warning' ? 7000 : 5000);
   }
@@ -421,8 +425,8 @@ export function createUI({ getSnapshot, actions }) {
       case 'toggle-chronicle': {
         const collapsed = document.querySelector('.chronicle').classList.toggle('collapsed');
         button.setAttribute('aria-expanded', String(!collapsed));
-        button.setAttribute('aria-label', collapsed ? 'Kroniği genişlet' : 'Kroniği küçült');
-        button.title = collapsed ? 'Kroniği genişlet' : 'Kroniği küçült';
+        button.setAttribute('aria-label', t(collapsed ? 'Kroniği genişlet' : 'Kroniği küçült'));
+        button.title = t(collapsed ? 'Kroniği genişlet' : 'Kroniği küçült');
         break;
       }
     }
@@ -443,6 +447,16 @@ export function createUI({ getSnapshot, actions }) {
       if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
     }, { signal });
   });
+  $('language-select').addEventListener('change', function (event) {
+    if (!setLanguage(event.target.value)) return;
+    localizeStatic(document);
+    selectionKey = '';
+    inspectorMarkup = '';
+    chronicleMarkup = '';
+    update(current || getSnapshot());
+    updateAggressionLabel();
+    setText('population-output', t(format($('world-population').value) + ' kişi'));
+  }, { signal });
   $('overlay-select').addEventListener('change', function (event) { runAction('setOverlay', event.target.value); }, { signal });
   $('event-filter').addEventListener('change', function (event) { eventFilter = event.target.value; renderChronicle(); chronicle.scrollTop = 0; }, { signal });
   $('world-population').addEventListener('input', function (event) { setText('population-output', format(event.target.value) + ' kişi'); }, { signal });
@@ -482,6 +496,7 @@ export function createUI({ getSnapshot, actions }) {
     const active = inspector.contains(document.activeElement) ? document.activeElement.closest('[data-focus-key]') : null;
     const focusKey = active?.dataset.focusKey;
     inspector.innerHTML = markup;
+    localizeFresh(inspector);
     inspectorMarkup = markup;
     inspector.scrollTop = scroll;
     if (focusKey) {
@@ -535,7 +550,7 @@ export function createUI({ getSnapshot, actions }) {
     setText('mobile-inspector-label', selected ? name : 'Dünya defteri');
     const close = $('inspector-close');
     close.style.visibility = !selected && !mobile.matches ? 'hidden' : 'visible';
-    close.setAttribute('aria-label', mobile.matches ? 'Dünya defterini kapat' : 'Seçimi temizle ve dünya özetine dön');
+    close.setAttribute('aria-label', t(mobile.matches ? 'Dünya defterini kapat' : 'Seçimi temizle ve dünya özetine dön'));
     replaceInspector(markup);
     if (selectedPerson && !portraitFailure) {
       const canvas = $('person-portrait');
@@ -563,6 +578,7 @@ export function createUI({ getSnapshot, actions }) {
       const scroll = chronicle.scrollTop;
       const focusId = chronicle.contains(document.activeElement) ? document.activeElement.dataset.eventId : null;
       chronicle.innerHTML = markup;
+      localizeFresh(chronicle);
       chronicleMarkup = markup;
       chronicle.scrollTop = scroll;
       if (focusId != null) [...chronicle.querySelectorAll('[data-event-id]')].find(function (element) { return sameId(element.dataset.eventId, focusId); })?.focus({ preventScroll: true });
@@ -589,7 +605,7 @@ export function createUI({ getSnapshot, actions }) {
     setIcon($('season-icon'), season[1]);
     const pause = $('pause-button');
     setIcon(pause, paused ? 'play' : 'pause');
-    pause.setAttribute('aria-label', paused ? 'Simülasyonu sürdür' : 'Simülasyonu duraklat');
+    pause.setAttribute('aria-label', t(paused ? 'Simülasyonu sürdür' : 'Simülasyonu duraklat'));
     pause.setAttribute('aria-pressed', String(paused));
     document.querySelectorAll('[data-speed]').forEach(function (button) {
       const active = number(button.dataset.speed) === number(speed);
@@ -605,7 +621,7 @@ export function createUI({ getSnapshot, actions }) {
     $('live-badge').classList.toggle('paused', paused);
     setText('live-label', paused ? 'ZAMAN DURDU' : 'CANLI DÜNYA');
     const weather = WEATHER[world.weather?.type] || WEATHER.clear;
-    const weatherMarkup = icon(weather[1]) + '<span>' + escapeHtml(weather[0]) + '</span>' + (Number.isFinite(Number(world.weather?.temperature)) ? '<span class="weather-temperature">' + format(world.weather.temperature) + '°</span>' : '');
+    const weatherMarkup = icon(weather[1]) + '<span>' + escapeHtml(t(weather[0])) + '</span>' + (Number.isFinite(Number(world.weather?.temperature)) ? '<span class="weather-temperature">' + format(world.weather.temperature) + '°</span>' : '');
     if ($('map-weather').innerHTML !== weatherMarkup) $('map-weather').innerHTML = weatherMarkup;
     $('map-weather').hidden = tool !== 'inspect';
     $('active-tool-banner').hidden = tool === 'inspect' || !TOOL_TEXT[tool];
@@ -618,8 +634,8 @@ export function createUI({ getSnapshot, actions }) {
     const sound = $('sound-button');
     setIcon(sound, soundEnabled ? 'sound' : 'sound-off');
     sound.setAttribute('aria-pressed', String(soundEnabled));
-    sound.setAttribute('aria-label', soundEnabled ? 'Ortam sesini kapat' : 'Ortam sesini aç');
-    sound.title = soundEnabled ? 'Ortam sesi açık' : 'Ortam sesi kapalı';
+    sound.setAttribute('aria-label', t(soundEnabled ? 'Ortam sesini kapat' : 'Ortam sesini aç'));
+    sound.title = t(soundEnabled ? 'Ortam sesi açık' : 'Ortam sesi kapalı');
     if (current.saving) setText('save-status', 'Kaydediliyor…');
     else if (current.lastSaved) {
       const date = new Date(current.lastSaved);
